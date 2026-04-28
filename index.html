@@ -287,6 +287,8 @@ table.atstbl tr:hover td{background:var(--cream)}
     <button class="tablink" onclick="swTab('attendance',this)">👥 Attendance</button>
     <button class="tablink" onclick="swTab('mismatches',this)">⚖️ Mismatches</button>
     <button class="tablink" onclick="swTab('returns',this)">↩️ Returns</button>
+    <button class="tablink" onclick="swTab('inventory',this)">📦 Inventory</button>
+    <button class="tablink" onclick="swTab('recurring',this)">🔁 Recurring</button>
   </div>
   <div class="mc">
     <!-- SETTINGS -->
@@ -515,6 +517,122 @@ table.atstbl tr:hover td{background:var(--cream)}
       </div>
       <div class="twrap"><table class="rt"><thead><tr><th>Date</th><th>Supplier</th><th>Item</th><th>Reason</th><th>Qty</th><th>Resolution</th><th>Status</th><th>Ref No.</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="rtbody"></tbody></table></div>
     </div>
+
+    <!-- ═══ INVENTORY ═══ -->
+    <div class="tabpane" id="tab-inventory">
+      <!-- Main view -->
+      <div id="inv-main-view">
+        <div class="statsbar">
+          <div class="sc"><div class="scn" id="prod-count" style="font-size:16px;margin-top:4px">0 items</div><div class="scl">Products</div></div>
+          <div class="sc b"><div class="scn" id="sess-open-count">0</div><div class="scl">Open Sessions</div></div>
+          <div class="sc g"><div class="scn" id="sess-closed-count">0</div><div class="scl">Completed Sessions</div></div>
+          <div class="sc a"><div class="scn" id="inv-var-count">—</div><div class="scl">Last Variances</div></div>
+        </div>
+        <!-- Stock Check Sessions -->
+        <div class="modhead">
+          <div class="modtitle">📦 Stock Check Sessions</div>
+          <button class="addbtn" onclick="openNewSessionModal()">＋ New Stock Check</button>
+        </div>
+        <div class="twrap" style="margin-bottom:22px">
+          <table class="rt">
+            <thead><tr><th>Session Name</th><th>Date</th><th>Items Counted</th><th>Variances</th><th>Variance Value</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="sessbody"></tbody>
+          </table>
+        </div>
+        <!-- Product Master -->
+        <div class="modhead">
+          <div class="modtitle" style="font-size:18px">🗂 Product Master</div>
+          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+            <label class="addbtn" style="cursor:pointer;font-size:12px">⬆ Upload CSV<input type="file" accept=".csv" onchange="handleProductCSV(event)" style="display:none"></label>
+            <button class="exportbtn" onclick="downloadSampleCSV()">⬇ Sample CSV</button>
+            <button class="addbtn" onclick="openProductModal()" style="font-size:12px">＋ Add Product</button>
+          </div>
+        </div>
+        <div class="sbar">
+          <input class="si" type="text" id="prod-srch" placeholder="Search by name or barcode..." oninput="renderProducts()">
+          <select class="fsel" id="prod-catf" onchange="renderProducts()"><option value="">All Categories</option></select>
+        </div>
+        <div class="twrap">
+          <table class="rt">
+            <thead><tr><th>Product Name</th><th>Barcode</th><th>Category</th><th>Unit</th><th>Price</th><th>Last Updated</th><th>Actions</th></tr></thead>
+            <tbody id="prodbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Session counting view (shown when session is open) -->
+      <div id="inv-session-view" style="display:none">
+        <div style="background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div>
+            <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--sage-dark)" id="sess-title">Session</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">Date: <span id="sess-date"></span></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center" id="close-sess-btn">
+            <button class="exportbtn" onclick="exportSessionCSV()">⬇ Export CSV</button>
+            <button class="addbtn" style="background:var(--red);font-size:12px" onclick="closeSession()">✓ Close Session</button>
+            <button class="exportbtn" onclick="closeSessionView()">← Back</button>
+          </div>
+        </div>
+        <!-- Stats -->
+        <div class="statsbar" style="margin-bottom:16px">
+          <div class="sc"><div class="scn" id="sess-stat-total">0</div><div class="scl">Total Products</div></div>
+          <div class="sc g"><div class="scn" id="sess-stat-counted">0</div><div class="scl">Counted</div></div>
+          <div class="sc a"><div class="scn" id="sess-stat-remaining">0</div><div class="scl">Remaining</div></div>
+          <div class="sc r"><div class="scn" id="sess-stat-var">0</div><div class="scl">Variances</div></div>
+        </div>
+        <!-- Scan input -->
+        <div id="sess-count-input" style="background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:18px 20px;margin-bottom:16px">
+          <div style="font-weight:700;font-size:13px;color:var(--sage-dark);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">📷 Scan or Type Barcode</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+            <input type="text" id="bc-input" placeholder="Scan barcode or type product name / barcode and press Enter..." style="flex:1;padding:11px 14px;border:2px solid var(--sage);border-radius:var(--rs);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;background:var(--white)" onkeydown="onBarcodeInput(event)">
+            <button onclick="lookupBarcode(document.getElementById('bc-input').value)" style="background:var(--sage);color:white;border:none;border-radius:var(--rs);padding:11px 18px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Search</button>
+          </div>
+          <div id="bc-result"></div>
+        </div>
+        <!-- Count list -->
+        <div style="background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden">
+          <div style="padding:13px 16px;border-bottom:1px solid var(--cream-dark);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <span style="font-weight:700;font-size:13.5px;color:var(--sage-dark)">Count List</span>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="count-view-all" onchange="renderCountList()"> Show all items (including matched)</label>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="rt" style="min-width:700px">
+              <thead><tr><th>Product</th><th>Barcode</th><th>Category</th><th>System Qty</th><th>Physical Qty</th><th>Variance</th><th>Variance Value</th><th>Counted By</th></tr></thead>
+              <tbody id="countlistbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ RECURRING TASKS ═══ -->
+    <div class="tabpane" id="tab-recurring">
+      <!-- Upcoming -->
+      <div style="background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;margin-bottom:22px">
+        <div style="background:var(--sage-pale);padding:13px 18px;border-bottom:1px solid var(--cream-dark);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:700;font-size:13px;color:var(--sage-dark);text-transform:uppercase;letter-spacing:.5px">📅 Upcoming — Next 90 Days</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="rt" style="min-width:600px">
+            <thead><tr><th>Task</th><th>Due Date</th><th>Frequency</th><th>Assigned To</th><th>Action</th></tr></thead>
+            <tbody id="upcomingbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Templates -->
+      <div class="modhead">
+        <div class="modtitle">🔁 Recurring Task Templates</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:12px;color:var(--muted)" id="rec-template-count">0 recurring tasks</span>
+          <button class="addbtn" onclick="openRecurringModal()">＋ Add Recurring Task</button>
+        </div>
+      </div>
+      <div class="twrap">
+        <table class="rt">
+          <thead><tr><th>Task</th><th>Frequency</th><th>Assigned To</th><th>Priority</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="rectemplbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -580,6 +698,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let DB = {
   tasks:[], cc:[], att:{}, staff:[{id:'s1',name:'Store Staff',role:'Store Assistant'}],
   mm:[], rt:[], ccf:null, ql:[],
+  products:[], sessions:[], recurringTemplates:[],
   pw:{manager:'admin123',staff:'staff123'}, sets:{}
 };
 let role='manager', filter='all', attDate=td(), ccExp=0, ccAct=0;
@@ -599,7 +718,7 @@ const DEFAULT_QL = [
 // CACHE — load instantly, refresh in background
 // ═══════════════════════════════════════════
 function saveCache(){
-  try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ts:Date.now(), data:{tasks:DB.tasks,cc:DB.cc,att:DB.att,staff:DB.staff,mm:DB.mm,rt:DB.rt,ccf:DB.ccf,ql:DB.ql}})); }catch{}
+  try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ts:Date.now(), data:{tasks:DB.tasks,cc:DB.cc,att:DB.att,staff:DB.staff,mm:DB.mm,rt:DB.rt,ccf:DB.ccf,ql:DB.ql,products:DB.products,sessions:DB.sessions,recurringTemplates:DB.recurringTemplates}})); }catch{}
 }
 function loadCache(){
   try{
@@ -607,6 +726,9 @@ function loadCache(){
     if(!c) return false;
     const age=Date.now()-c.ts;
     Object.assign(DB, c.data);
+    if(!DB.products)DB.products=[];
+    if(!DB.sessions)DB.sessions=[];
+    if(!DB.recurringTemplates)DB.recurringTemplates=[];
     if(!DB.ql||!DB.ql.length) DB.ql=DEFAULT_QL;
     if(!DB.staff||!DB.staff.length) DB.staff=[{id:'s1',name:'Store Staff',role:'Store Assistant'}];
     return age < CACHE_TTL; // true = fresh enough, false = stale but usable
@@ -662,13 +784,16 @@ function parseRows(s,rows){
   if(s==='RT') return data.map(r=>{const o=toO(r);o.qty=parseInt(o.qty)||0;return o;});
   if(s==='CCF'){const pays=[],exps=[];data.forEach(r=>{if(r[0]==='pay')pays.push({id:r[1],lbl:r[2]});else if(r[0]==='exp')exps.push({id:r[1],lbl:r[2]})});return{pays,exps};}
   if(s==='QL') return data.map(r=>({id:r[0],name:r[1],icon:r[2],url:r[3],hint:r[4]||''}));
+  if(s==='Products') return data.map(r=>({id:r[0],name:r[1],barcode:r[2]||'',cat:r[3]||'',unit:r[4]||'pcs',price:parseFloat(r[5])||0,updatedAt:r[6]||''}));
+  if(s==='Sessions'){return data.map(r=>{try{const full=JSON.parse(r[7]||'{}');return{...full,id:r[0],name:r[1],type:r[2],date:r[3],status:r[4],createdBy:r[5],closedAt:r[6]||''};}catch{return{id:r[0],name:r[1],date:r[3],status:r[4],items:[],productSnapshot:[]}}});}
+  if(s==='Recurring') return data.map(r=>({id:r[0],title:r[1],desc:r[2]||'',recurrence:r[3],assignedTo:r[4],priority:r[5]||'medium',status:r[6]||'active',due:r[7]||'',lastDue:r[8]||null}));
   return null;
 }
 
 async function loadAll(){
   sync('syncing','Loading data...');
   // Load all sheets in parallel for speed
-  const sheets=['Tasks','CC','Att','Staff','MM','RT','CCF','QL'];
+  const sheets=['Tasks','CC','Att','Staff','MM','RT','CCF','QL','Products','Sessions','Recurring'];
   const results=await Promise.all(sheets.map(s=>gsRead(s)));
   let loaded=0;
   sheets.forEach((s,i)=>{
@@ -684,6 +809,9 @@ async function loadAll(){
         else if(s==='RT')DB.rt=p;
         else if(s==='CCF')DB.ccf=p;
         else if(s==='QL'&&p.length)DB.ql=p;
+        else if(s==='Products')DB.products=p;
+        else if(s==='Sessions')DB.sessions=p;
+        else if(s==='Recurring')DB.recurringTemplates=p;
         loaded++;
       }
     }
@@ -764,7 +892,7 @@ function swTab(t,btn){
   document.querySelectorAll('.tablink').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+t).classList.add('active');btn.classList.add('active');
 }
-function renderAll(){renderQL();renderTasks();initCC();renderAttGrid();renderAttSum();renderMM();renderRT();}
+function renderAll(){renderQL();renderTasks();initCC();renderAttGrid();renderAttSum();renderMM();renderRT();renderProducts();renderSessions();renderRecurringTemplates();renderUpcomingRecurring();}
 
 // ═══════════════════════════════════════════
 // QUICK LAUNCH
@@ -1175,8 +1303,542 @@ function exportCSV(t){let h,rows,fn;if(t==='mm'){h=['Date','Supplier','Item','Ty
 // ═══════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════
-window.addEventListener('click',e=>{['m-ql','m-task','m-mm','m-rt','m-staff','m-exp'].forEach(id=>{if(e.target===document.getElementById(id))cm(id)})});
+window.addEventListener('click',e=>{['m-ql','m-task','m-mm','m-rt','m-staff','m-exp','m-product','m-newsess','m-recurring'].forEach(id=>{if(e.target===document.getElementById(id))cm(id)})});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('m-exp').classList.contains('open')){const d=document.getElementById('exp-new-desc').value.trim();const a=document.getElementById('exp-new-amt').value;if(d&&a)addExpItem();}});
+
+// ═══════════════════════════════════════════
+// INVENTORY MODULE
+// ═══════════════════════════════════════════
+
+// Product master
+function renderProducts(){
+  const cats=[...new Set(DB.products.map(p=>p.cat||'Uncategorised'))].sort();
+  const search=(document.getElementById('prod-srch')?.value||'').toLowerCase();
+  const catf=document.getElementById('prod-catf')?.value||'';
+  let prods=DB.products;
+  if(search)prods=prods.filter(p=>p.name.toLowerCase().includes(search)||p.barcode.includes(search));
+  if(catf)prods=prods.filter(p=>p.cat===catf);
+  document.getElementById('prod-count').textContent=prods.length+' items';
+  const catSel=document.getElementById('prod-catf');
+  if(catSel){const cur=catSel.value;catSel.innerHTML='<option value="">All Categories</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');catSel.value=cur;}
+  const tbody=document.getElementById('prodbody');
+  if(!prods.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">No products yet. Add products or upload CSV.</td></tr>';return;}
+  tbody.innerHTML=prods.map(p=>`<tr>
+    <td><strong>${esc(p.name)}</strong></td>
+    <td><code style="font-size:11px;background:var(--cream-dark);padding:2px 6px;border-radius:4px">${esc(p.barcode||'—')}</code></td>
+    <td><span class="pill" style="background:var(--sage-pale);color:var(--sage-dark)">${esc(p.cat||'—')}</span></td>
+    <td>${esc(p.unit||'—')}</td>
+    <td>${p.price?fmt(p.price):'—'}</td>
+    <td style="color:var(--muted);font-size:12px">${p.updatedAt?new Date(p.updatedAt).toLocaleDateString('en-IN'):'—'}</td>
+    <td><button class="tbtn te" onclick="openProductModal('${p.id}')">✏️</button><button class="tbtn td" onclick="delProduct('${p.id}')">🗑</button></td>
+  </tr>`).join('');
+}
+
+function openProductModal(id){
+  document.getElementById('m-product').classList.add('open');
+  document.getElementById('prod-id').value=id||'';
+  if(id){
+    const p=DB.products.find(p=>p.id===id);if(!p)return;
+    document.getElementById('prod-name').value=p.name||'';
+    document.getElementById('prod-barcode').value=p.barcode||'';
+    document.getElementById('prod-cat').value=p.cat||'';
+    document.getElementById('prod-unit').value=p.unit||'pcs';
+    document.getElementById('prod-price').value=p.price||'';
+  } else {
+    ['prod-name','prod-barcode','prod-cat','prod-price'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+    document.getElementById('prod-unit').value='pcs';
+  }
+  // Populate category datalist
+  const cats=[...new Set(DB.products.map(p=>p.cat||'').filter(Boolean))].sort();
+  document.getElementById('cat-list').innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
+}
+
+async function saveProduct(){
+  const name=document.getElementById('prod-name').value.trim();
+  const barcode=document.getElementById('prod-barcode').value.trim();
+  if(!name){toast('Product name is required.');return;}
+  busy('prodsavebtn',true);
+  const eid=document.getElementById('prod-id').value;
+  const p={id:eid||'p'+Date.now(),name,barcode,cat:document.getElementById('prod-cat').value.trim(),unit:document.getElementById('prod-unit').value,price:parseFloat(document.getElementById('prod-price').value)||0,updatedAt:new Date().toISOString()};
+  if(eid){const i=DB.products.findIndex(x=>x.id===eid);if(i>-1)DB.products[i]=p;}
+  else DB.products.unshift(p);
+  schedSync('Products');cm('m-product');renderProducts();
+  busy('prodsavebtn',false);toast('Product saved ✓','ok');
+}
+
+function delProduct(id){
+  if(!confirm('Delete this product?'))return;
+  DB.products=DB.products.filter(p=>p.id!==id);
+  schedSync('Products');renderProducts();toast('Deleted.');
+}
+
+// CSV Upload
+function handleProductCSV(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const lines=ev.target.result.split('\n').filter(l=>l.trim());
+    if(lines.length<2){toast('CSV must have a header row and at least one product.');return;}
+    const hdr=lines[0].split(',').map(h=>h.trim().toLowerCase().replace(/['"]/g,''));
+    const nameI=hdr.findIndex(h=>h.includes('name')||h.includes('item'));
+    const bcI=hdr.findIndex(h=>h.includes('barcode')||h.includes('ean')||h.includes('code'));
+    const catI=hdr.findIndex(h=>h.includes('cat'));
+    const unitI=hdr.findIndex(h=>h.includes('unit'));
+    const priceI=hdr.findIndex(h=>h.includes('price')||h.includes('mrp'));
+    if(nameI<0){toast('CSV must have a "name" or "item" column.');return;}
+    let added=0,updated=0;
+    lines.slice(1).forEach(line=>{
+      const cols=line.split(',').map(c=>c.trim().replace(/^["']|["']$/g,''));
+      const name=cols[nameI];if(!name)return;
+      const barcode=bcI>=0?cols[bcI]:'';
+      const existing=DB.products.find(p=>p.barcode&&p.barcode===barcode)||(DB.products.find(p=>p.name.toLowerCase()===name.toLowerCase()));
+      const p={id:existing?.id||'p'+Date.now()+Math.random().toString(36).slice(2),name,barcode:barcode||'',cat:catI>=0?cols[catI]:'',unit:unitI>=0?cols[unitI]:'pcs',price:priceI>=0?parseFloat(cols[priceI])||0:0,updatedAt:new Date().toISOString()};
+      if(existing){const i=DB.products.findIndex(x=>x.id===existing.id);DB.products[i]=p;updated++;}
+      else{DB.products.push(p);added++;}
+    });
+    schedSync('Products');renderProducts();
+    toast(`✓ ${added} added, ${updated} updated from CSV`,'ok');
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+// ─── STOCK CHECK SESSIONS ───
+let currentSession=null;
+let barcodeBuffer='';
+let barcodeTimer=null;
+
+function renderSessions(){
+  const sess=DB.sessions||[];
+  const open=sess.filter(s=>s.status==='open');
+  const closed=sess.filter(s=>s.status==='closed');
+  document.getElementById('sess-open-count').textContent=open.length;
+  document.getElementById('sess-closed-count').textContent=closed.length;
+  const tbody=document.getElementById('sessbody');
+  if(!sess.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">No stock check sessions yet. Start one above.</td></tr>';return;}
+  tbody.innerHTML=[...open,...closed].map(s=>{
+    const items=s.items||[];
+    const varItems=items.filter(i=>i.variance!==0);
+    const totalVar=items.reduce((sum,i)=>sum+Math.abs(i.varianceValue||0),0);
+    const sc=s.status==='open'?'pp':'pr';
+    return `<tr>
+      <td><strong>${esc(s.name)}</strong><br><small style="color:var(--muted)">${esc(s.type||'')}</small></td>
+      <td>${s.date}</td>
+      <td style="text-align:center">${items.length}</td>
+      <td style="text-align:center;color:${varItems.length>0?'var(--red)':'var(--green)'};font-weight:600">${varItems.length}</td>
+      <td style="color:var(--red);font-weight:600">${totalVar>0?fmt(totalVar):'—'}</td>
+      <td><span class="pill ${sc}">${s.status==='open'?'⏳ Open':'✓ Closed'}</span></td>
+      <td style="white-space:nowrap">
+        ${s.status==='open'?`<button class="tbtn" style="background:var(--blue-l);color:var(--blue)" onclick="openSession('${s.id}')">▶ Continue</button>`:''}
+        <button class="tbtn te" onclick="viewSession('${s.id}')">📊 Report</button>
+        ${role==='manager'?`<button class="tbtn td" onclick="delSession('${s.id}')">🗑</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openNewSessionModal(){
+  document.getElementById('sess-name').value='';
+  document.getElementById('sess-type').value='full';
+  document.getElementById('sess-cat-filter').value='';
+  // Populate category options
+  const cats=[...new Set(DB.products.map(p=>p.cat||'').filter(Boolean))].sort();
+  const sel=document.getElementById('sess-cat-filter');
+  sel.innerHTML='<option value="">All Categories</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  document.getElementById('m-newsess').classList.add('open');
+}
+
+function startSession(){
+  const name=document.getElementById('sess-name').value.trim();
+  if(!name){toast('Enter a session name.');return;}
+  const catFilter=document.getElementById('sess-cat-filter').value;
+  const type=document.getElementById('sess-type').value;
+  // Filter products for this session
+  let products=DB.products;
+  if(catFilter)products=products.filter(p=>p.cat===catFilter);
+  if(!products.length){toast('No products found for this selection.');return;}
+  const sess={
+    id:'sess'+Date.now(),name,type,catFilter,
+    date:td(),createdBy:role==='manager'?'Manager':(DB.staff[0]?.name||'Staff'),
+    status:'open',items:[],createdAt:new Date().toISOString(),
+    productSnapshot:products.map(p=>({id:p.id,name:p.name,barcode:p.barcode,cat:p.cat,unit:p.unit,price:p.price}))
+  };
+  if(!DB.sessions)DB.sessions=[];
+  DB.sessions.unshift(sess);
+  schedSync('Sessions');cm('m-newsess');
+  openSession(sess.id);
+  toast('Session started ✓','ok');
+}
+
+function openSession(id){
+  currentSession=DB.sessions.find(s=>s.id===id);
+  if(!currentSession)return;
+  document.getElementById('inv-session-view').style.display='block';
+  document.getElementById('inv-main-view').style.display='none';
+  renderSessionCount();
+  // Focus barcode input
+  setTimeout(()=>document.getElementById('bc-input')?.focus(),100);
+}
+
+function closeSessionView(){
+  document.getElementById('inv-session-view').style.display='none';
+  document.getElementById('inv-main-view').style.display='block';
+  currentSession=null;
+  renderSessions();
+}
+
+function closeSession(){
+  if(!currentSession)return;
+  if(!confirm('Close this session? You can still view the report but cannot add more counts.'))return;
+  currentSession.status='closed';currentSession.closedAt=new Date().toISOString();
+  schedSync('Sessions');closeSessionView();
+  toast('Session closed and saved to Google Sheets ✓','ok');
+}
+
+function renderSessionCount(){
+  if(!currentSession)return;
+  document.getElementById('sess-title').textContent=currentSession.name;
+  document.getElementById('sess-date').textContent=currentSession.date;
+  const items=currentSession.items||[];
+  const total=currentSession.productSnapshot?.length||0;
+  const counted=items.length;
+  const varItems=items.filter(i=>i.variance!==0);
+  document.getElementById('sess-stat-total').textContent=total;
+  document.getElementById('sess-stat-counted').textContent=counted;
+  document.getElementById('sess-stat-remaining').textContent=Math.max(0,total-counted);
+  document.getElementById('sess-stat-var').textContent=varItems.length;
+  renderCountList();
+}
+
+// Barcode scan / type handler
+function onBarcodeInput(e){
+  const val=document.getElementById('bc-input').value.trim();
+  if(e.key==='Enter'&&val){
+    lookupBarcode(val);
+    document.getElementById('bc-input').value='';
+  }
+}
+
+// Hardware scanner fires chars very fast then Enter — detect this
+document.addEventListener('keydown',function(e){
+  if(!currentSession)return;
+  if(document.activeElement?.id==='bc-input')return; // already handled
+  if(e.key==='Enter'&&barcodeBuffer.length>3){
+    lookupBarcode(barcodeBuffer);
+    barcodeBuffer='';
+  } else if(e.key.length===1){
+    barcodeBuffer+=e.key;
+    if(barcodeTimer)clearTimeout(barcodeTimer);
+    barcodeTimer=setTimeout(()=>{barcodeBuffer='';},100);
+  }
+});
+
+function lookupBarcode(code){
+  const snap=currentSession.productSnapshot||[];
+  const prod=snap.find(p=>p.barcode===code)||snap.find(p=>p.name.toLowerCase()===code.toLowerCase());
+  if(!prod){
+    toast('⚠️ Product not found: '+code);
+    document.getElementById('bc-result').innerHTML=`<div style="background:var(--red-l);color:var(--red);padding:10px 14px;border-radius:var(--rs);font-size:13px">❌ Not found: <strong>${esc(code)}</strong> — add it to Product Master first.</div>`;
+    return;
+  }
+  // Check if already counted
+  const existing=currentSession.items.find(i=>i.productId===prod.id);
+  showCountEntry(prod,existing);
+}
+
+function showCountEntry(prod,existing){
+  const html=`<div style="background:var(--sage-pale);border-radius:var(--r);padding:14px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="flex:1;min-width:200px">
+      <div style="font-weight:700;font-size:14px">${esc(prod.name)}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${esc(prod.cat||'')} · ${esc(prod.unit||'pcs')} · ${prod.price?fmt(prod.price):''}</div>
+      ${existing?`<div style="font-size:11.5px;color:var(--amber);margin-top:3px">⚠️ Already counted — updating</div>`:''}
+    </div>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div><label style="font-size:10.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;text-transform:uppercase">System Qty</label>
+        <input type="number" id="sys-qty" value="${existing?.systemQty||''}" min="0" step="0.001" placeholder="0" style="width:90px;padding:7px 9px;border:1.5px solid var(--cream-dark);border-radius:var(--rs);font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;text-align:center;outline:none" oninput="calcEntryVar()" onfocus="this.style.borderColor='var(--sage)'" onblur="this.style.borderColor='var(--cream-dark)'">
+      </div>
+      <div><label style="font-size:10.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;text-transform:uppercase">Physical Qty</label>
+        <input type="number" id="phy-qty" value="${existing?.physicalQty||''}" min="0" step="0.001" placeholder="0" style="width:90px;padding:7px 9px;border:1.5px solid var(--cream-dark);border-radius:var(--rs);font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;text-align:center;outline:none" oninput="calcEntryVar()" onfocus="this.style.borderColor='var(--sage)'" onblur="this.style.borderColor='var(--cream-dark)'">
+      </div>
+      <div id="entry-var-display" style="min-width:80px;text-align:center"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;min-width:160px">
+      <input type="text" id="count-notes" value="${existing?.notes||''}" placeholder="Notes (optional)" style="padding:6px 9px;border:1.5px solid var(--cream-dark);border-radius:var(--rs);font-family:'DM Sans',sans-serif;font-size:12.5px;outline:none">
+      <button onclick="saveCountEntry('${prod.id}')" style="background:var(--sage);color:white;border:none;border-radius:var(--rs);padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">✓ Save Count</button>
+    </div>
+  </div>`;
+  document.getElementById('bc-result').innerHTML=html;
+  // Auto-focus physical qty
+  setTimeout(()=>{document.getElementById('phy-qty')?.focus();},50);
+  calcEntryVar();
+}
+
+function calcEntryVar(){
+  const sys=parseFloat(document.getElementById('sys-qty')?.value)||0;
+  const phy=parseFloat(document.getElementById('phy-qty')?.value)||0;
+  const v=phy-sys;
+  const el=document.getElementById('entry-var-display');
+  if(!el)return;
+  if(!sys&&!phy){el.innerHTML='';return;}
+  const cls=Math.abs(v)<0.001?'bal':v<0?'sho':'exc';
+  const col=Math.abs(v)<0.001?'var(--green)':v<0?'var(--red)':'var(--amber)';
+  el.innerHTML=`<div style="font-size:10px;font-weight:700;color:${col};text-transform:uppercase;margin-bottom:2px">Variance</div><div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:${col}">${v>0?'+':''}${v.toFixed(2)}</div>`;
+}
+
+function saveCountEntry(productId){
+  const sys=parseFloat(document.getElementById('sys-qty')?.value)||0;
+  const phy=parseFloat(document.getElementById('phy-qty')?.value)||0;
+  const notes=document.getElementById('count-notes')?.value?.trim()||'';
+  const variance=phy-sys;
+  const prod=currentSession.productSnapshot.find(p=>p.id===productId);
+  const varianceValue=variance*(prod?.price||0);
+  const entry={productId,productName:prod?.name||'',barcode:prod?.barcode||'',cat:prod?.cat||'',unit:prod?.unit||'pcs',price:prod?.price||0,systemQty:sys,physicalQty:phy,variance,varianceValue,notes,countedBy:role==='manager'?'Manager':(DB.staff[0]?.name||'Staff'),countedAt:new Date().toISOString()};
+  const idx=currentSession.items.findIndex(i=>i.productId===productId);
+  if(idx>-1)currentSession.items[idx]=entry;else currentSession.items.push(entry);
+  schedSync('Sessions');
+  document.getElementById('bc-result').innerHTML=`<div style="background:var(--green-l);color:var(--green);padding:10px 14px;border-radius:var(--rs);font-size:13px;font-weight:600">✓ ${esc(prod?.name||'')} saved — Variance: ${variance>=0?'+':''}${variance.toFixed(2)} ${prod?.unit||''}</div>`;
+  document.getElementById('bc-input').value='';
+  document.getElementById('bc-input').focus();
+  renderSessionCount();
+}
+
+// Count list at bottom of session
+function renderCountList(){
+  if(!currentSession)return;
+  const items=currentSession.items||[];
+  const viewAll=document.getElementById('count-view-all')?.checked;
+  let show=viewAll?items:items.filter(i=>i.variance!==0);
+  show=[...show].sort((a,b)=>new Date(b.countedAt)-new Date(a.countedAt));
+  const tbody=document.getElementById('countlistbody');
+  if(!show.length){tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">${viewAll?'No items counted yet.':'No variances found — all items match!'}</td></tr>`;return;}
+  tbody.innerHTML=show.map(i=>{
+    const vc=Math.abs(i.variance)<0.001?'pbl':i.variance<0?'pso':'pes';
+    const vl=(i.variance>=0?'+':'')+i.variance.toFixed(2);
+    return `<tr>
+      <td><strong>${esc(i.productName)}</strong></td>
+      <td><code style="font-size:11px;background:var(--cream-dark);padding:1px 5px;border-radius:3px">${esc(i.barcode||'—')}</code></td>
+      <td><span class="pill" style="background:var(--sage-pale);color:var(--sage-dark)">${esc(i.cat||'—')}</span></td>
+      <td style="text-align:center">${i.systemQty}</td>
+      <td style="text-align:center">${i.physicalQty}</td>
+      <td><span class="pill ${vc}">${vl} ${esc(i.unit||'')}</span></td>
+      <td style="color:${i.varianceValue<0?'var(--red)':i.varianceValue>0?'var(--amber)':'var(--green)'};font-weight:600">${i.varianceValue!==0?fmt(Math.abs(i.varianceValue)):'—'}</td>
+      <td><small style="color:var(--muted)">${esc(i.countedBy)}</small></td>
+    </tr>`;
+  }).join('');
+}
+
+// Session report view
+function viewSession(id){
+  const sess=DB.sessions.find(s=>s.id===id);if(!sess)return;
+  currentSession=sess;
+  document.getElementById('inv-session-view').style.display='block';
+  document.getElementById('inv-main-view').style.display='none';
+  document.getElementById('sess-count-input').style.display=sess.status==='open'?'block':'none';
+  document.getElementById('close-sess-btn').style.display=sess.status==='open'?'flex':'none';
+  renderSessionCount();
+}
+
+function delSession(id){
+  if(!confirm('Delete this session and all its data?'))return;
+  DB.sessions=DB.sessions.filter(s=>s.id!==id);
+  schedSync('Sessions');renderSessions();toast('Deleted.');
+}
+
+function exportSessionCSV(){
+  if(!currentSession)return;
+  const h=['Product','Barcode','Category','Unit','Price','System Qty','Physical Qty','Variance','Variance Value (₹)','Notes','Counted By','Counted At'];
+  const rows=currentSession.items.map(i=>[i.productName,i.barcode||'',i.cat||'',i.unit||'',i.price||0,i.systemQty,i.physicalQty,i.variance,i.varianceValue||0,i.notes||'',i.countedBy,new Date(i.countedAt).toLocaleString('en-IN')]);
+  const csv=[h,...rows].map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download=currentSession.name.replace(/\s+/g,'_')+'_stock_check.csv';a.click();
+  toast('Exported ✓','ok');
+}
+
+// ═══════════════════════════════════════════
+// RECURRING TASKS MODULE
+// ═══════════════════════════════════════════
+
+function getNextDue(task){
+  const now=new Date();
+  const base=task.lastDue?new Date(task.lastDue):new Date(task.due);
+  let next=new Date(base);
+  switch(task.recurrence){
+    case'daily': next.setDate(next.getDate()+1); break;
+    case'weekly': next.setDate(next.getDate()+7); break;
+    case'monthly': next.setMonth(next.getMonth()+1); break;
+    case'bimonthly': next.setMonth(next.getMonth()+2); break;
+    case'quarterly': next.setMonth(next.getMonth()+3); break;
+    case'yearly': next.setFullYear(next.getFullYear()+1); break;
+    default: return null;
+  }
+  return next;
+}
+
+function generateUpcomingRecurring(){
+  // For each recurring task template, generate upcoming instances for next 90 days
+  const templates=DB.recurringTemplates||[];
+  const upcoming=[];
+  const horizon=new Date();horizon.setDate(horizon.getDate()+90);
+  templates.forEach(t=>{
+    if(t.status==='paused')return;
+    let next=getNextDue(t);
+    let count=0;
+    while(next&&next<=horizon&&count<10){
+      upcoming.push({...t,instanceDate:next.toISOString(),dueDisplay:next.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'})});
+      const tmp={...t,lastDue:next.toISOString()};
+      next=getNextDue(tmp);count++;
+    }
+  });
+  upcoming.sort((a,b)=>new Date(a.instanceDate)-new Date(b.instanceDate));
+  return upcoming;
+}
+
+function renderRecurringTemplates(){
+  const templates=DB.recurringTemplates||[];
+  document.getElementById('rec-template-count').textContent=templates.length+' recurring tasks';
+  const tbody=document.getElementById('rectemplbody');
+  if(!templates.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">No recurring tasks set up yet.</td></tr>';return;}
+  const rl={daily:'Daily',weekly:'Weekly',monthly:'Monthly',bimonthly:'Every 2 Months',quarterly:'Quarterly',yearly:'Yearly'};
+  tbody.innerHTML=templates.map(t=>`<tr>
+    <td><strong>${esc(t.title)}</strong>${t.desc?`<br><small style="color:var(--muted)">${esc(t.desc)}</small>`:''}</td>
+    <td><span class="pill" style="background:var(--blue-l);color:var(--blue)">${rl[t.recurrence]||t.recurrence}</span></td>
+    <td><span class="tassigned">👤 ${esc(t.assignedTo||'—')}</span></td>
+    <td><span class="ptag ${t.priority[0]}">${t.priority}</span></td>
+    <td><span class="pill ${t.status==='active'?'pr':'pp'}">${t.status}</span></td>
+    <td style="white-space:nowrap">
+      <button class="tbtn te" onclick="openRecurringModal('${t.id}')">✏️</button>
+      <button class="tbtn" style="background:${t.status==='active'?'var(--amber-l)':'var(--green-l)'};color:${t.status==='active'?'var(--amber)':'var(--green)'}" onclick="toggleRecurring('${t.id}')">${t.status==='active'?'⏸ Pause':'▶ Resume'}</button>
+      <button class="tbtn td" onclick="delRecurring('${t.id}')">🗑</button>
+    </td>
+  </tr>`).join('');
+}
+
+function renderUpcomingRecurring(){
+  const upcoming=generateUpcomingRecurring();
+  const tbody=document.getElementById('upcomingbody');
+  if(!upcoming.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--muted)">No upcoming recurring tasks in the next 90 days.</td></tr>';return;}
+  const rl={daily:'Daily',weekly:'Weekly',monthly:'Monthly',bimonthly:'Every 2 Months',quarterly:'Quarterly',yearly:'Yearly'};
+  const now=new Date();
+  tbody.innerHTML=upcoming.map(t=>{
+    const due=new Date(t.instanceDate);
+    const daysAway=Math.ceil((due-now)/(1000*60*60*24));
+    const urgency=daysAway<=3?'var(--red)':daysAway<=7?'var(--amber)':'var(--sage-dark)';
+    return `<tr>
+      <td><strong>${esc(t.title)}</strong></td>
+      <td style="color:${urgency};font-weight:600">${t.dueDisplay} <small style="font-weight:400;color:var(--muted)">(${daysAway===0?'Today':daysAway===1?'Tomorrow':'in '+daysAway+' days'})</small></td>
+      <td><span class="pill" style="background:var(--blue-l);color:var(--blue)">${rl[t.recurrence]||t.recurrence}</span></td>
+      <td><span class="tassigned">👤 ${esc(t.assignedTo||'—')}</span></td>
+      <td><button class="tbtn" style="background:var(--sage-pale);color:var(--sage-dark)" onclick="createFromTemplate('${t.id}','${t.instanceDate}')">+ Create Task</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function openRecurringModal(id){
+  document.getElementById('m-recurring').classList.add('open');
+  document.getElementById('rec-id').value=id||'';
+  const sel=document.getElementById('rec-assign');
+  sel.innerHTML='<option value="Manager">👑 Manager</option>'+DB.staff.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+  if(id){
+    const t=(DB.recurringTemplates||[]).find(t=>t.id===id);if(!t)return;
+    document.getElementById('rec-title').value=t.title||'';
+    document.getElementById('rec-desc').value=t.desc||'';
+    document.getElementById('rec-recurrence').value=t.recurrence||'monthly';
+    document.getElementById('rec-assign').value=t.assignedTo||'Manager';
+    document.getElementById('rec-priority').value=t.priority||'medium';
+  } else {
+    ['rec-title','rec-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+    document.getElementById('rec-recurrence').value='monthly';
+    document.getElementById('rec-priority').value='medium';
+  }
+}
+
+async function saveRecurring(){
+  const title=document.getElementById('rec-title').value.trim();
+  if(!title){toast('Enter a title.');return;}
+  busy('recsavebtn',true);
+  if(!DB.recurringTemplates)DB.recurringTemplates=[];
+  const eid=document.getElementById('rec-id').value;
+  const t={id:eid||'rt'+Date.now(),title,desc:document.getElementById('rec-desc').value.trim(),recurrence:document.getElementById('rec-recurrence').value,assignedTo:document.getElementById('rec-assign').value,priority:document.getElementById('rec-priority').value,status:'active',due:new Date().toISOString(),lastDue:null,createdAt:new Date().toISOString()};
+  if(eid){const i=DB.recurringTemplates.findIndex(x=>x.id===eid);if(i>-1)DB.recurringTemplates[i]=t;}
+  else DB.recurringTemplates.push(t);
+  schedSync('Recurring');cm('m-recurring');
+  renderRecurringTemplates();renderUpcomingRecurring();
+  busy('recsavebtn',false);toast('Saved ✓','ok');
+}
+
+function toggleRecurring(id){
+  const t=(DB.recurringTemplates||[]).find(t=>t.id===id);
+  if(!t)return;t.status=t.status==='active'?'paused':'active';
+  schedSync('Recurring');renderRecurringTemplates();renderUpcomingRecurring();
+}
+
+function delRecurring(id){
+  if(!confirm('Delete this recurring task?'))return;
+  DB.recurringTemplates=(DB.recurringTemplates||[]).filter(t=>t.id!==id);
+  schedSync('Recurring');renderRecurringTemplates();renderUpcomingRecurring();toast('Deleted.');
+}
+
+function createFromTemplate(id,instanceDate){
+  const t=(DB.recurringTemplates||[]).find(t=>t.id===id);if(!t)return;
+  const due=new Date(instanceDate);due.setHours(10,0);
+  DB.tasks.push({id:'task'+Date.now(),title:t.title,desc:t.desc||'',due:due.toISOString().slice(0,16),priority:t.priority,status:'pending',createdAt:new Date().toISOString(),completedAt:'',completionNote:'',assignedTo:t.assignedTo,createdBy:'Recurring',recurringId:t.id});
+  t.lastDue=instanceDate;
+  schedSync('Tasks');schedSync('Recurring');
+  renderRecurringTemplates();renderUpcomingRecurring();renderTasks();
+  toast('Task created ✓','ok');
+}
+
+
+function downloadSampleCSV(){
+  const csv = 'name,barcode,category,unit,price\nCold Pressed Groundnut Oil 1L,8901234567890,Oils,L,320\nFoxtail Millet 500g,8901234567891,Millets,g,85\nOrganic Jaggery Powder 500g,8901234567892,Sweeteners,g,120';
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='product_master_sample.csv';a.click();
+}
+
 </script>
+
+<!-- Product Modal -->
+<div class="moverlay" id="m-product"><div class="modal"><h2>📦 Product</h2>
+  <input type="hidden" id="prod-id">
+  <div class="frow">
+    <div class="fg"><label class="fl">Product Name *</label><input class="fi" type="text" id="prod-name" placeholder="e.g. Cold Pressed Groundnut Oil 1L"></div>
+    <div class="fg"><label class="fl">Barcode / SKU</label><input class="fi" type="text" id="prod-barcode" placeholder="Scan or type barcode"></div>
+  </div>
+  <div class="frow">
+    <div class="fg"><label class="fl">Category</label><input class="fi" type="text" id="prod-cat" list="cat-list" placeholder="e.g. Oils, Millets, Spices..."><datalist id="cat-list"></datalist></div>
+    <div class="fg"><label class="fl">Unit</label><select class="fsel2" id="prod-unit"><option value="pcs">Pieces (pcs)</option><option value="kg">Kilograms (kg)</option><option value="g">Grams (g)</option><option value="L">Litres (L)</option><option value="ml">Millilitres (ml)</option><option value="box">Box</option><option value="pack">Pack</option></select></div>
+  </div>
+  <div class="fg"><label class="fl">Selling Price (₹)</label><input class="fi" type="number" id="prod-price" placeholder="0.00" min="0" step="0.01"></div>
+  <div class="mfooter"><button class="cancelbtn" onclick="cm('m-product')">Cancel</button><button class="savebtn" id="prodsavebtn" onclick="saveProduct()">Save Product</button></div>
+</div></div>
+
+<!-- New Session Modal -->
+<div class="moverlay" id="m-newsess"><div class="modal"><h2>📦 Start Stock Check</h2>
+  <div class="fg"><label class="fl">Session Name *</label><input class="fi" type="text" id="sess-name" placeholder="e.g. April Full Count, Oils Check 28 Apr"></div>
+  <div class="frow">
+    <div class="fg"><label class="fl">Type</label><select class="fsel2" id="sess-type"><option value="full">Full Store Count</option><option value="category">Category Check</option><option value="spot">Spot Check</option></select></div>
+    <div class="fg"><label class="fl">Filter by Category</label><select class="fsel2" id="sess-cat-filter"><option value="">All Categories</option></select></div>
+  </div>
+  <p style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.6">Staff will scan barcodes and enter physical vs system quantities. The session stays open until you close it.</p>
+  <div class="mfooter"><button class="cancelbtn" onclick="cm('m-newsess')">Cancel</button><button class="savebtn" onclick="startSession()">▶ Start Session</button></div>
+</div></div>
+
+<!-- Recurring Task Modal -->
+<div class="moverlay" id="m-recurring"><div class="modal"><h2>🔁 Recurring Task</h2>
+  <input type="hidden" id="rec-id">
+  <div class="fg"><label class="fl">Task Title *</label><input class="fi" type="text" id="rec-title" placeholder="e.g. GST Filing, Weekly Stock Count..."></div>
+  <div class="fg"><label class="fl">Description / Instructions</label><textarea class="fta" id="rec-desc" placeholder="Steps or details for staff..."></textarea></div>
+  <div class="frow">
+    <div class="fg"><label class="fl">Frequency *</label><select class="fsel2" id="rec-recurrence">
+      <option value="daily">Daily</option>
+      <option value="weekly">Weekly</option>
+      <option value="monthly" selected>Monthly</option>
+      <option value="bimonthly">Every 2 Months</option>
+      <option value="quarterly">Quarterly</option>
+      <option value="yearly">Yearly</option>
+    </select></div>
+    <div class="fg"><label class="fl">Assigned To</label><select class="fsel2" id="rec-assign"></select></div>
+  </div>
+  <div class="fg"><label class="fl">Priority</label><select class="fsel2" id="rec-priority"><option value="high">🔴 High</option><option value="medium" selected>🟡 Medium</option><option value="low">🟢 Low</option></select></div>
+  <div class="mfooter"><button class="cancelbtn" onclick="cm('m-recurring')">Cancel</button><button class="savebtn" id="recsavebtn" onclick="saveRecurring()">Save</button></div>
+</div></div>
 </body>
 </html>
