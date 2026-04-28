@@ -388,8 +388,9 @@ table.atstbl tr:hover td{background:var(--cream)}
               </div>
               <div class="ccrow">
                 <div class="ccrlbl">Opening Balance <small>(cash at start of day)</small></div>
-                <div class="ccinput"><span class="ccpfx">₹</span><input class="ccnum" type="number" id="cc-open" min="0" step="0.01" placeholder="0.00" oninput="calcCC()"></div>
+                <div class="ccinput"><span class="ccpfx">₹</span><input class="ccnum" type="number" id="cc-open" min="0" step="0.01" placeholder="0.00" oninput="calcCC();document.getElementById('opening-hint').style.display='none'"></div>
               </div>
+              <div style="padding:2px 16px 6px;font-size:11px;color:var(--sage-dark);display:none" id="opening-hint"></div>
               <div class="ccrow">
                 <div class="ccrlbl">Cash Deposited to Bank</div>
                 <div class="ccinput"><span class="ccpfx">₹</span><input class="ccnum" type="number" id="cc-dep" min="0" step="0.01" placeholder="0.00" oninput="calcCC()"></div>
@@ -764,7 +765,7 @@ function buildRows(s){
   if(s==='Tasks'){const h=['id','title','desc','due','priority','status','createdAt','completedAt','completionNote','assignedTo','createdBy'];return[h,...DB.tasks.map(t=>h.map(k=>t[k]||''))]}
   if(s==='CC'){const h=['date','sale','nc','exp','cash','open','dep','expected','actual','variance','notes','status','by','at','paydata','expdata','denomdata','expitemsdata'];return[h,...DB.cc.map(c=>h.map(k=>c[k]||''))]}
   if(s==='Att'){const h=['k','v'];return[h,...Object.entries(DB.att).map(([k,v])=>[k,v])]}
-  if(s==='Staff'){return[['id','name','role'],...DB.staff.map(s=>[s.id,s.name,s.role||''])]}
+  if(s==='Staff'){return[['id','name','role'],...DB.staff.map(sf=>[sf.id,sf.name,sf.role||''])]}
   if(s==='MM'){const h=['id','date','type','sup','item','inv','rec','stat','cn','rem'];return[h,...DB.mm.map(r=>h.map(k=>r[k]||''))]}
   if(s==='RT'){const h=['id','date','rsn','sup','item','qty','res','stat','ref','notes'];return[h,...DB.rt.map(r=>h.map(k=>r[k]||''))]}
   if(s==='CCF'){const f=getCCF();const rows=[['type','id','lbl']];f.pays.forEach(p=>rows.push(['pay',p.id,p.lbl]));f.exps.forEach(e=>rows.push(['exp',e.id,e.lbl]));return rows;}
@@ -802,7 +803,7 @@ function parseRows(s,rows){
   if(s==='CCF'){const pays=[],exps=[];data.forEach(r=>{if(r[0]==='pay')pays.push({id:r[1],lbl:r[2]});else if(r[0]==='exp')exps.push({id:r[1],lbl:r[2]})});return{pays,exps};}
   if(s==='QL') return data.map(r=>({id:r[0],name:r[1],icon:r[2],url:r[3],hint:r[4]||''}));
   if(s==='Products') return data.map(r=>({id:r[0],name:r[1],barcode:r[2]||'',cat:r[3]||'',unit:r[4]||'pcs',price:parseFloat(r[5])||0,updatedAt:r[6]||''}));
-  if(s==='Sessions'){return data.map(r=>{try{const full=JSON.parse(r[7]||'{}');return{...full,id:r[0],name:r[1],type:r[2],date:r[3],status:r[4],createdBy:r[5],closedAt:r[6]||''};}catch{return{id:r[0],name:r[1],date:r[3],status:r[4],items:[],productSnapshot:[]}}});}
+  if(s==='Sessions'){return data.map(r=>{try{const d=JSON.parse(r[7]||'{}');return{...d,id:r[0],name:r[1],type:r[2],date:r[3],status:r[4],createdBy:r[5],closedAt:r[6]||''};}catch{return{id:r[0],name:r[1],type:r[2],date:r[3],status:r[4],createdBy:r[5],closedAt:'',items:[],productSnapshot:[]}}});}
   if(s==='Recurring') return data.map(r=>({id:r[0],title:r[1],desc:r[2]||'',recurrence:r[3],assignedTo:r[4],priority:r[5]||'medium',status:r[6]||'active',due:r[7]||'',lastDue:r[8]||null}));
   return null;
 }
@@ -1044,6 +1045,20 @@ function initCC(){
   renderCCFields();renderDenoms();onCCDate();renderCCHist();renderCCStat();
 }
 
+function getPrevClosingBalance(date){
+  // Find most recent closing before given date and return its counter cash balance
+  // Counter closing balance = actual cash counted (what was left in counter)
+  const sorted = DB.cc
+    .filter(c => c.date < date && c.actual !== undefined)
+    .sort((a,b) => b.date.localeCompare(a.date));
+  if(!sorted.length) return null;
+  const prev = sorted[0];
+  // Closing balance = actual cash counted - cash deposited to bank
+  // i.e. what physically remains in the counter at end of day
+  const closingBalance = prev.actual - (prev.dep || 0);
+  return { date: prev.date, balance: closingBalance };
+}
+
 function renderCCFields(){
   const f=getCCF();const isM=role==='manager';
   document.getElementById('cc-prows').innerHTML=f.pays.map(p=>`
@@ -1166,9 +1181,26 @@ function calcVar(){
 }
 function onCCDate(){
   const date=document.getElementById('ccdate').value;
+  if(!date) return;
   const ex=DB.cc.find(c=>c.date===date);
   document.getElementById('editnotice').style.display=ex?'block':'none';
-  if(ex)loadCCRec(ex);
+  if(ex){
+    loadCCRec(ex);
+  } else {
+    // New date — auto-fill opening balance from previous day's closing
+    const prev=getPrevClosingBalance(date);
+    if(prev){
+      document.getElementById('cc-open').value=prev.balance>0?prev.balance.toFixed(2):'0';
+      // Show a subtle hint
+      document.getElementById('opening-hint').textContent=
+        '↑ Auto-filled from '+prev.date+' closing balance';
+      document.getElementById('opening-hint').style.display='block';
+    } else {
+      document.getElementById('cc-open').value='';
+      document.getElementById('opening-hint').style.display='none';
+    }
+    calcCC();
+  }
 }
 function loadCCRec(c){
   document.getElementById('cc-sale').value=c.sale||'';
@@ -1203,7 +1235,9 @@ async function submitCC(){
   DB.cc=DB.cc.filter(c=>c.date!==date);DB.cc.unshift(rec);
   schedSync('CC');
   renderCCHist();renderCCStat();document.getElementById('editnotice').style.display='block';
-  busy('ccsubmitbtn',false,'✅ Submit Closing');
+  document.getElementById('ccsubmitbtn').disabled=false;
+  document.getElementById('ccsubmitbtn').style.opacity='1';
+  document.getElementById('ccsubmitbtn').textContent='✅ Submit Closing';
   toast('Counter closing saved to Google Sheets ✓','ok');
   if(role==='staff'){
     const expNote=expSummary?'\n💸 Expenses: '+expSummary:'';
@@ -1211,7 +1245,52 @@ async function submitCC(){
   }
 }
 function appCC(date){const c=DB.cc.find(c=>c.date===date);if(c){c.status='approved';c.appAt=new Date().toISOString()}schedSync('CC');renderCCHist();renderCCStat();toast('Approved ✓','ok')}
-function editCC(date){document.getElementById('ccdate').value=date;onCCDate();document.getElementById('tab-closing').scrollIntoView({behavior:'smooth'})}
+function editCC(date){
+  document.getElementById('ccdate').value=date;
+  onCCDate();
+  // Scroll to top of closing tab
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function loadCCFromHistory(date){
+  window.scrollTo({top:0,behavior:'smooth'});
+  document.getElementById('ccdate').value=date;
+  const rec=DB.cc.find(c=>c.date===date);
+  if(!rec)return;
+  loadCCRec(rec);
+  document.getElementById('editnotice').style.display='block';
+
+  // Edit permission rules:
+  // Manager — always editable
+  // Staff — editable only if the record date is today or yesterday
+  const today=td();
+  const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
+  const yStr=yesterday.toISOString().slice(0,10);
+  const staffCanEdit = (date===today || date===yStr);
+
+  if(role==='manager'){
+    document.getElementById('editnotice').textContent='✏️ Editing record for '+date+' — saving will update it.';
+    document.getElementById('editnotice').style.background='var(--amber-l)';
+    document.getElementById('editnotice').style.color='var(--amber)';
+    document.getElementById('ccsubmitbtn').disabled=false;
+    document.getElementById('ccsubmitbtn').style.opacity='1';
+    document.getElementById('ccsubmitbtn').textContent='✅ Update Closing';
+  } else if(staffCanEdit){
+    document.getElementById('editnotice').textContent='✏️ Editing record for '+date+' — editable (today or yesterday).';
+    document.getElementById('editnotice').style.background='var(--amber-l)';
+    document.getElementById('editnotice').style.color='var(--amber)';
+    document.getElementById('ccsubmitbtn').disabled=false;
+    document.getElementById('ccsubmitbtn').style.opacity='1';
+    document.getElementById('ccsubmitbtn').textContent='✅ Update Closing';
+  } else {
+    document.getElementById('editnotice').textContent='🔒 This record is locked — only manager can edit closings older than yesterday.';
+    document.getElementById('editnotice').style.background='var(--red-l)';
+    document.getElementById('editnotice').style.color='var(--red)';
+    document.getElementById('ccsubmitbtn').disabled=true;
+    document.getElementById('ccsubmitbtn').style.opacity='0.4';
+    document.getElementById('ccsubmitbtn').textContent='🔒 Locked';
+  }
+}
 function delCC(date){if(!confirm('Delete?'))return;DB.cc=DB.cc.filter(c=>c.date!==date);schedSync('CC');renderCCHist();renderCCStat();toast('Deleted.')}
 function clearCC(){
   ['cc-sale','cc-open','cc-dep'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});
@@ -1223,6 +1302,12 @@ function clearCC(){
   document.getElementById('varbox').className='varbox';document.getElementById('varnum').textContent='—';document.getElementById('varmsg').textContent='Enter values to calculate';
   document.getElementById('editnotice').style.display='none';document.getElementById('cc-exp-summary').style.display='none';
   expItems={};ccExp=0;ccAct=0;
+  document.getElementById('opening-hint').style.display='none';
+  document.getElementById('ccsubmitbtn').disabled=false;
+  document.getElementById('ccsubmitbtn').style.opacity='1';
+  document.getElementById('ccsubmitbtn').textContent='✅ Submit Closing';
+  // Re-trigger date change to auto-fill opening balance for today
+  onCCDate();
 }
 function renderCCStat(){const all=DB.cc;document.getElementById('cctl').textContent=all.length;document.getElementById('ccpd').textContent=all.filter(c=>c.status==='submitted').length;document.getElementById('ccsh').textContent=all.filter(c=>(c.variance||0)<-0.01).length;document.getElementById('ccex').textContent=all.filter(c=>(c.variance||0)>0.01).length}
 function renderCCHist(){
@@ -1233,7 +1318,17 @@ function renderCCHist(){
   tbody.innerHTML=recs.map(c=>{
     const v=c.variance||0;const vc=Math.abs(v)<0.01?'pbl':v<0?'pso':'pes';const vl=Math.abs(v)<0.01?'Balanced':v<0?`-${fmt(Math.abs(v))}`:`+${fmt(v)}`;
     const sc=c.status==='approved'?'pap':'psb';const sl=c.status==='approved'?'✓ Approved':'⏳ Pending';
-    return `<tr><td><strong>${c.date}</strong></td><td>${fmt(c.sale)}</td><td>${fmt(c.nc||0)}</td><td>${fmt(c.cash||0)}</td><td>${fmt(c.open||0)}</td><td>${fmt(c.expected||0)}</td><td>${fmt(c.actual||0)}</td><td><span class="pill ${vc}">${vl}</span></td><td><span class="pill ${sc}">${sl}</span></td><td><small style="color:var(--muted)">${esc(c.notes||'—')}</small></td><td style="white-space:nowrap">${isM&&c.status==='submitted'?`<button class="tbtn ta" onclick="appCC('${c.date}')">✅</button> `:''}${isM?`<button class="tbtn te" onclick="editCC('${c.date}')">✏️</button><button class="tbtn td" onclick="delCC('${c.date}')">🗑</button>`:''}</td></tr>`;
+    return `<tr>
+      <td><button onclick="loadCCFromHistory('${c.date}')" style="background:none;border:none;cursor:pointer;color:var(--blue);font-weight:700;font-size:13px;text-decoration:underline;padding:0">${c.date}</button></td>
+      <td>${fmt(c.sale)}</td><td>${fmt(c.nc||0)}</td><td>${fmt(c.cash||0)}</td><td>${fmt(c.open||0)}</td><td>${fmt(c.expected||0)}</td><td>${fmt(c.actual||0)}</td>
+      <td><span class="pill ${vc}">${vl}</span></td>
+      <td><span class="pill ${sc}">${sl}</span></td>
+      <td><small style="color:var(--muted)">${esc(c.notes||'—')}</small></td>
+      <td style="white-space:nowrap">
+        ${isM&&c.status==='submitted'?`<button class="tbtn ta" onclick="appCC('${c.date}')">✅</button> `:''}
+        ${isM?`<button class="tbtn te" onclick="editCC('${c.date}')">✏️</button><button class="tbtn td" onclick="delCC('${c.date}')">🗑</button>`:''}
+      </td>
+    </tr>`;
   }).join('');
 }
 function exportCCCSV(){const h=['Date','Total Sale','Non-Cash','Cash Sales','Opening','Deposited','Expected','Actual','Variance','Status','Notes'];const rows=DB.cc.map(c=>[c.date,c.sale,c.nc||0,c.cash||0,c.open||0,c.dep||0,c.expected||0,c.actual||0,c.variance||0,c.status,c.notes||'']);const csv=[h,...rows].map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='counter_closings.csv';a.click();toast('Exported ✓','ok')}
