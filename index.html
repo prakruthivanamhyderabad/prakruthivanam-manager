@@ -776,8 +776,25 @@ function parseRows(s,rows){
   if(!rows||rows.length<2) return null;
   const h=rows[0], data=rows.slice(1);
   const toO=r=>{const o={};h.forEach((k,i)=>o[k]=r[i]||'');return o;};
-  if(s==='Tasks') return data.map(toO);
-  if(s==='CC') return data.map(r=>{const o=toO(r);['sale','nc','exp','cash','open','dep','expected','actual','variance'].forEach(k=>o[k]=parseFloat(o[k])||0);return o;});
+  if(s==='Tasks') return data.map(r=>{
+    const o=toO(r);
+    if(!o.assignedTo)o.assignedTo='';
+    if(!o.createdBy)o.createdBy='';
+    if(!o.recurringId)o.recurringId='';
+    return o;
+  });
+  if(s==='CC'){
+    return data.map(r=>{
+      const o=toO(r);
+      ['sale','nc','exp','cash','open','dep','expected','actual','variance'].forEach(k=>o[k]=parseFloat(o[k])||0);
+      // paydata/expdata/denomdata/expitemsdata may not exist in older sheets — default to empty
+      if(!o.paydata)o.paydata='';
+      if(!o.expdata)o.expdata='';
+      if(!o.denomdata)o.denomdata='';
+      if(!o.expitemsdata)o.expitemsdata='';
+      return o;
+    });
+  }
   if(s==='Att'){const att={};data.forEach(r=>{if(r[0]&&r[1])att[r[0]]=r[1]});return att;}
   if(s==='Staff') return data.map(r=>({id:r[0],name:r[1],role:r[2]||''}));
   if(s==='MM') return data.map(r=>{const o=toO(r);o.inv=parseInt(o.inv)||0;o.rec=parseInt(o.rec)||0;return o;});
@@ -853,6 +870,8 @@ function doLogin(){
     document.getElementById('addrtbtn').style.display=isM?'flex':'none';
     document.getElementById('cc-addp-row').style.display=isM?'flex':'none';
     document.getElementById('cc-adde-row').style.display=isM?'flex':'none';
+    // Save session so page refresh doesn't log out
+    localStorage.setItem('do_session', JSON.stringify({role, ts: Date.now()}));
     loadSets();
     // Load from cache immediately for fast render, then refresh from Sheets
     const fresh=loadCache();
@@ -864,7 +883,7 @@ function doLogin(){
   }
 }
 
-function logout(){document.getElementById('login').style.display='flex';document.getElementById('app').style.display='none';document.getElementById('lpw').value='';document.getElementById('lerr').style.display='none'}
+function logout(){localStorage.removeItem('do_session');document.getElementById('login').style.display='flex';document.getElementById('app').style.display='none';document.getElementById('lpw').value='';document.getElementById('lerr').style.display='none'}
 
 // ═══════════════════════════════════════════
 // SETTINGS
@@ -1303,6 +1322,33 @@ function exportCSV(t){let h,rows,fn;if(t==='mm'){h=['Date','Supplier','Item','Ty
 // ═══════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════
+// Auto-restore session on page load
+window.addEventListener('load', () => {
+  try {
+    const sess = JSON.parse(localStorage.getItem('do_session'));
+    if(sess && sess.role) {
+      role = sess.role;
+      // Restore passwords and settings first
+      try{DB.pw=JSON.parse(localStorage.getItem('do_pw'))||{manager:'admin123',staff:'staff123'};}catch{}
+      document.getElementById('login').style.display='none';
+      document.getElementById('app').style.display='block';
+      document.getElementById('rbadge').textContent=role==='manager'?'👑 Manager':'🧑‍💼 Staff';
+      const isM=role==='manager';
+      document.getElementById('setbtn').style.display=isM?'inline-flex':'none';
+      document.getElementById('addstaffbtn').style.display=isM?'flex':'none';
+      document.getElementById('addmmbtn').style.display=isM?'flex':'none';
+      document.getElementById('addrtbtn').style.display=isM?'flex':'none';
+      document.getElementById('cc-addp-row').style.display=isM?'flex':'none';
+      document.getElementById('cc-adde-row').style.display=isM?'flex':'none';
+      loadSets();
+      const fresh=loadCache();
+      renderAll();
+      if(!fresh){sync('syncing','Loading fresh data...');}
+      loadAll();
+    }
+  } catch(e) { /* no saved session, show login normally */ }
+});
+
 window.addEventListener('click',e=>{['m-ql','m-task','m-mm','m-rt','m-staff','m-exp','m-product','m-newsess','m-recurring'].forEach(id=>{if(e.target===document.getElementById(id))cm(id)})});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('m-exp').classList.contains('open')){const d=document.getElementById('exp-new-desc').value.trim();const a=document.getElementById('exp-new-amt').value;if(d&&a)addExpItem();}});
 
