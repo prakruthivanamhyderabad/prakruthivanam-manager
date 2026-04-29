@@ -812,6 +812,43 @@ function buildRows(s){
   if(s==='RT'){const h=['id','date','rsn','sup','item','qty','res','stat','ref','notes'];return[h,...DB.rt.map(r=>h.map(k=>r[k]||''))]}
   if(s==='CCF'){const f=getCCF();const rows=[['type','id','lbl']];f.pays.forEach(p=>rows.push(['pay',p.id,p.lbl]));f.exps.forEach(e=>rows.push(['exp',e.id,e.lbl]));return rows;}
   if(s==='QL'){return[['id','name','icon','url','hint'],...DB.ql.map(q=>[q.id,q.name,q.icon,q.url,q.hint||''])]}
+  if(s==='Products'){
+    const h=['id','name','barcode','cat','unit','price','updatedAt'];
+    return[h,...(DB.products||[]).map(p=>h.map(k=>String(p[k]||'')))];
+  }
+  if(s==='Sessions'){
+    return[
+      ['id','name','type','date','status','createdBy','closedAt','itemsJSON','snapshotJSON'],
+      ...(DB.sessions||[]).map(ss=>[
+        ss.id,ss.name,ss.type||'',ss.date,ss.status||'open',
+        ss.createdBy||'',ss.closedAt||'',
+        JSON.stringify(ss.items||[]),
+        JSON.stringify(ss.productSnapshot||[])
+      ])
+    ];
+  }
+  if(s==='Invoices'){
+    return[
+      ['id','invoiceNo','supplier','date','createdAt','itemsJSON'],
+      ...(DB.invoices||[]).map(inv=>[
+        inv.id,inv.invoiceNo||'',inv.supplier||'',inv.date||'',
+        inv.createdAt||'',JSON.stringify(inv.items||[])
+      ])
+    ];
+  }
+  if(s==='ReturnGroups'){
+    return[
+      ['id','date','supplier','notes','createdAt','itemsJSON'],
+      ...(DB.returnGroups||[]).map(rg=>[
+        rg.id,rg.date||'',rg.supplier||'',rg.notes||'',
+        rg.createdAt||'',JSON.stringify(rg.items||[])
+      ])
+    ];
+  }
+  if(s==='Recurring'){
+    const h=['id','title','desc','recurrence','assignedTo','priority','status','due','lastDue'];
+    return[h,...(DB.recurringTemplates||[]).map(t=>h.map(k=>String(t[k]||'')))];
+  }
   return null;
 }
 
@@ -858,8 +895,20 @@ function parseRows(s,rows){
     });
   }
   if(s==='Recurring') return data.map(r=>({id:r[0],title:r[1],desc:r[2]||'',recurrence:r[3],assignedTo:r[4],priority:r[5]||'medium',status:r[6]||'active',due:r[7]||'',lastDue:r[8]||null}));
-  if(s==='Invoices'){return data.map(r=>{try{return JSON.parse(r[1]||'{}')}catch{return null}}).filter(Boolean);}
-  if(s==='ReturnGroups'){return data.map(r=>{try{return JSON.parse(r[1]||'{}')}catch{return null}}).filter(Boolean);}
+  if(s==='Invoices'){
+    return data.map(r=>{
+      let items=[];
+      try{items=JSON.parse(r[5]||'[]');}catch{}
+      return{id:r[0],invoiceNo:r[1]||'',supplier:r[2]||'',date:r[3]||'',createdAt:r[4]||'',items};
+    });
+  }
+  if(s==='ReturnGroups'){
+    return data.map(r=>{
+      let items=[];
+      try{items=JSON.parse(r[5]||'[]');}catch{}
+      return{id:r[0],date:r[1]||'',supplier:r[2]||'',notes:r[3]||'',createdAt:r[4]||'',items};
+    });
+  }
   return null;
 }
 
