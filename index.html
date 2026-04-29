@@ -246,6 +246,26 @@ table.atstbl td{padding:9px 13px;border-bottom:1px solid var(--cream-dark)}
 table.atstbl tr:last-child td{border-bottom:none}
 table.atstbl tr:hover td{background:var(--cream)}
 @media(max-width:700px){.statsbar{grid-template-columns:1fr 1fr}.ccwrap{grid-template-columns:1fr}.frow,.sgrid{grid-template-columns:1fr}.mc{padding:14px}.tcard{grid-template-columns:1fr}.tactns{flex-direction:row;flex-wrap:wrap}}
+
+/* ─── Invoice / Return Group Cards ─── */
+.inv-card{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
+.inv-card-hdr{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;cursor:pointer;transition:background .15s;flex-wrap:wrap;gap:8px}
+.inv-card-hdr:hover{background:var(--sage-pale)}
+.inv-card-hdr.open{background:var(--sage-pale);border-bottom:1px solid var(--cream-dark)}
+.inv-hdr-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.inv-no{font-weight:700;font-size:14px;color:var(--sage-dark)}
+.inv-supplier{font-size:12.5px;color:var(--muted)}
+.inv-date{font-size:12px;color:var(--muted)}
+.inv-summary{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.inv-toggle{font-size:12px;color:var(--muted);transition:transform .2s;display:inline-block}
+.inv-toggle.open{transform:rotate(180deg)}
+.inv-body{display:none;overflow-x:auto}
+.inv-body.open{display:block}
+.inv-item-row{display:grid;grid-template-columns:1fr 80px 70px 70px 60px 100px 100px auto;gap:0;border-bottom:1px solid var(--cream-dark)}
+.inv-item-row:last-child{border-bottom:none}
+.inv-item-row > div{padding:9px 13px;font-size:12.5px;display:flex;align-items:center}
+.inv-item-hdr{background:var(--cream);font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.inv-item-hdr > div{padding:7px 13px}
 </style>
 </head>
 <body>
@@ -288,7 +308,6 @@ table.atstbl tr:hover td{background:var(--cream)}
     <button class="tablink" onclick="swTab('mismatches',this)">⚖️ Mismatches</button>
     <button class="tablink" onclick="swTab('returns',this)">↩️ Returns</button>
     <button class="tablink" onclick="swTab('inventory',this)">📦 Inventory</button>
-    <button class="tablink" onclick="swTab('recurring',this)">🔁 Recurring</button>
   </div>
   <div class="mc">
     <!-- SETTINGS -->
@@ -482,41 +501,55 @@ table.atstbl tr:hover td{background:var(--cream)}
     <!-- MISMATCHES -->
     <div class="tabpane" id="tab-mismatches">
       <div class="statsbar">
-        <div class="sc a"><div class="scn" id="mm-pd">0</div><div class="scl">Pending</div></div>
-        <div class="sc b"><div class="scn" id="mm-pt">0</div><div class="scl">Partial</div></div>
-        <div class="sc g"><div class="scn" id="mm-rs">0</div><div class="scl">Resolved</div></div>
+        <div class="sc a"><div class="scn" id="mm-pd">0</div><div class="scl">Pending Items</div></div>
+        <div class="sc b"><div class="scn" id="mm-pt">0</div><div class="scl">Partial Items</div></div>
+        <div class="sc g"><div class="scn" id="mm-rs">0</div><div class="scl">Resolved Items</div></div>
         <div class="sc r"><div class="scn" id="mm-su">0</div><div class="scl">Units Short</div></div>
       </div>
       <div class="modhead">
         <div class="modtitle">⚖️ Invoice Mismatches</div>
-        <div style="display:flex;gap:7px"><button class="exportbtn" onclick="exportCSV('mm')">⬇ CSV</button><button class="addbtn" id="addmmbtn" onclick="openMM()" style="display:none">＋ Add</button></div>
+        <div style="display:flex;gap:7px">
+          <button class="exportbtn" onclick="exportMMCSV()">⬇ CSV</button>
+          <button class="addbtn" id="addmmbtn" onclick="openInvoiceModal()" style="display:none">＋ Add Invoice</button>
+        </div>
       </div>
-      <div class="sbar">
-        <input class="si" type="text" id="mm-srch" placeholder="Search supplier or item..." oninput="renderMM()">
-        <select class="fsel" id="mm-tf" onchange="renderMM()"><option value="">All Types</option><option value="short">Short Supply</option><option value="excess">Excess Supply</option><option value="wrong">Wrong Item</option></select>
+      <!-- Filters -->
+      <div class="sbar" style="margin-bottom:14px">
+        <input class="si" type="text" id="mm-srch" placeholder="Search supplier or invoice no..." oninput="renderMM()">
+        <input class="si" type="date" id="mm-date-from" style="max-width:150px" onchange="renderMM()" title="From date">
+        <input class="si" type="date" id="mm-date-to" style="max-width:150px" onchange="renderMM()" title="To date">
         <select class="fsel" id="mm-sf" onchange="renderMM()"><option value="">All Statuses</option><option value="pending">Pending</option><option value="partial">Partial</option><option value="resolved">Resolved</option></select>
+        <button class="exportbtn" onclick="clearMMFilters()">✕ Clear</button>
       </div>
-      <div class="twrap"><table class="rt"><thead><tr><th>Date</th><th>Supplier</th><th>Item</th><th>Type</th><th>Invoiced</th><th>Received</th><th>Diff</th><th>Status</th><th>Credit Note / Remarks</th><th>Actions</th></tr></thead><tbody id="mmbody"></tbody></table></div>
+      <!-- Invoice list -->
+      <div id="mm-invoice-list"></div>
     </div>
 
     <!-- RETURNS -->
     <div class="tabpane" id="tab-returns">
       <div class="statsbar">
-        <div class="sc a"><div class="scn" id="rt-pd">0</div><div class="scl">Pending</div></div>
-        <div class="sc b"><div class="scn" id="rt-pt">0</div><div class="scl">Partial</div></div>
-        <div class="sc g"><div class="scn" id="rt-rs">0</div><div class="scl">Resolved</div></div>
+        <div class="sc a"><div class="scn" id="rt-pd">0</div><div class="scl">Pending Items</div></div>
+        <div class="sc b"><div class="scn" id="rt-pt">0</div><div class="scl">Partial Items</div></div>
+        <div class="sc g"><div class="scn" id="rt-rs">0</div><div class="scl">Resolved Items</div></div>
         <div class="sc r"><div class="scn" id="rt-tq">0</div><div class="scl">Units Returned</div></div>
       </div>
       <div class="modhead">
         <div class="modtitle">↩️ Stock Returns</div>
-        <div style="display:flex;gap:7px"><button class="exportbtn" onclick="exportCSV('rt')">⬇ CSV</button><button class="addbtn" id="addrtbtn" onclick="openRT()" style="display:none">＋ Add</button></div>
+        <div style="display:flex;gap:7px">
+          <button class="exportbtn" onclick="exportRTCSV()">⬇ CSV</button>
+          <button class="addbtn" id="addrtbtn" onclick="openReturnGroupModal()" style="display:none">＋ Add Return</button>
+        </div>
       </div>
-      <div class="sbar">
-        <input class="si" type="text" id="rt-srch" placeholder="Search supplier or item..." oninput="renderRT()">
-        <select class="fsel" id="rt-rf" onchange="renderRT()"><option value="">All Reasons</option><option value="damaged">Damaged</option><option value="expired">Expired</option><option value="wrong">Wrong Item</option><option value="overstock">Overstock</option></select>
+      <!-- Filters -->
+      <div class="sbar" style="margin-bottom:14px">
+        <input class="si" type="text" id="rt-srch" placeholder="Search supplier..." oninput="renderRT()">
+        <input class="si" type="date" id="rt-date-from" style="max-width:150px" onchange="renderRT()" title="From date">
+        <input class="si" type="date" id="rt-date-to" style="max-width:150px" onchange="renderRT()" title="To date">
         <select class="fsel" id="rt-sf" onchange="renderRT()"><option value="">All Statuses</option><option value="pending">Pending</option><option value="partial">Partial</option><option value="resolved">Resolved</option></select>
+        <button class="exportbtn" onclick="clearRTFilters()">✕ Clear</button>
       </div>
-      <div class="twrap"><table class="rt"><thead><tr><th>Date</th><th>Supplier</th><th>Item</th><th>Reason</th><th>Qty</th><th>Resolution</th><th>Status</th><th>Ref No.</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="rtbody"></tbody></table></div>
+      <!-- Return groups list -->
+      <div id="rt-group-list"></div>
     </div>
 
     <!-- ═══ INVENTORY ═══ -->
@@ -567,10 +600,10 @@ table.atstbl tr:hover td{background:var(--cream)}
             <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--sage-dark)" id="sess-title">Session</div>
             <div style="font-size:12px;color:var(--muted);margin-top:2px">Date: <span id="sess-date"></span></div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center" id="close-sess-btn">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="exportbtn" onclick="closeSessionView()">← Back to Inventory</button>
             <button class="exportbtn" onclick="exportSessionCSV()">⬇ Export CSV</button>
-            <button class="addbtn" style="background:var(--red);font-size:12px" onclick="closeSession()">✓ Close Session</button>
-            <button class="exportbtn" onclick="closeSessionView()">← Back</button>
+            <button class="addbtn" style="background:var(--red);font-size:12px" id="close-sess-btn" onclick="closeSession()">✓ Close Session</button>
           </div>
         </div>
         <!-- Stats -->
@@ -605,35 +638,7 @@ table.atstbl tr:hover td{background:var(--cream)}
       </div>
     </div>
 
-    <!-- ═══ RECURRING TASKS ═══ -->
-    <div class="tabpane" id="tab-recurring">
-      <!-- Upcoming -->
-      <div style="background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;margin-bottom:22px">
-        <div style="background:var(--sage-pale);padding:13px 18px;border-bottom:1px solid var(--cream-dark);display:flex;align-items:center;justify-content:space-between">
-          <span style="font-weight:700;font-size:13px;color:var(--sage-dark);text-transform:uppercase;letter-spacing:.5px">📅 Upcoming — Next 90 Days</span>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="rt" style="min-width:600px">
-            <thead><tr><th>Task</th><th>Due Date</th><th>Frequency</th><th>Assigned To</th><th>Action</th></tr></thead>
-            <tbody id="upcomingbody"></tbody>
-          </table>
-        </div>
-      </div>
-      <!-- Templates -->
-      <div class="modhead">
-        <div class="modtitle">🔁 Recurring Task Templates</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <span style="font-size:12px;color:var(--muted)" id="rec-template-count">0 recurring tasks</span>
-          <button class="addbtn" onclick="openRecurringModal()">＋ Add Recurring Task</button>
-        </div>
-      </div>
-      <div class="twrap">
-        <table class="rt">
-          <thead><tr><th>Task</th><th>Frequency</th><th>Assigned To</th><th>Priority</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody id="rectemplbody"></tbody>
-        </table>
-      </div>
-    </div>
+
   </div>
 </div>
 
@@ -656,6 +661,26 @@ table.atstbl tr:hover td{background:var(--cream)}
     <div class="fg"><label class="fl">Priority</label><select class="fsel2" id="t-pri"><option value="high">🔴 High</option><option value="medium" selected>🟡 Medium</option><option value="low">🟢 Low</option></select></div>
   </div>
   <div class="fg"><label class="fl">Due Date *</label><input class="fi" type="datetime-local" id="t-due"></div>
+  <!-- Recurring toggle -->
+  <div style="background:var(--cream);border-radius:var(--rs);padding:12px 14px;margin-top:4px">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
+      <input type="checkbox" id="t-is-recurring" onchange="toggleRecurringFields()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--sage)">
+      <span style="font-size:13.5px;font-weight:600;color:var(--text)">🔁 Recurring task</span>
+    </label>
+    <div id="recurring-fields" style="display:none;margin-top:12px">
+      <label class="fl" style="margin-bottom:8px">Repeat every</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input class="fi" type="number" id="t-rec-num" value="1" min="1" max="365" style="width:80px;text-align:center;font-size:16px;font-weight:700">
+        <select class="fsel2" id="t-rec-unit" style="flex:1">
+          <option value="days">Day(s)</option>
+          <option value="weeks" selected>Week(s)</option>
+          <option value="months">Month(s)</option>
+          <option value="years">Year(s)</option>
+        </select>
+      </div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:8px">When this task is marked done, the next occurrence will be created automatically.</p>
+    </div>
+  </div>
   <div class="mfooter"><button class="cancelbtn" onclick="cm('m-task')">Cancel</button><button class="savebtn" id="tsavebtn" onclick="saveTask()">Create Task</button></div>
 </div></div>
 
@@ -699,7 +724,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let DB = {
   tasks:[], cc:[], att:{}, staff:[{id:'s1',name:'Store Staff',role:'Store Assistant'}],
   mm:[], rt:[], ccf:null, ql:[],
-  products:[], sessions:[], recurringTemplates:[],
+  products:[], sessions:[], recurringTemplates:[], invoices:[], returnGroups:[],
   pw:{manager:'admin123',staff:'staff123'}, sets:{}
 };
 let role='manager', filter='all', attDate=td(), ccExp=0, ccAct=0;
@@ -719,7 +744,7 @@ const DEFAULT_QL = [
 // CACHE — load instantly, refresh in background
 // ═══════════════════════════════════════════
 function saveCache(){
-  try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ts:Date.now(), data:{tasks:DB.tasks,cc:DB.cc,att:DB.att,staff:DB.staff,mm:DB.mm,rt:DB.rt,ccf:DB.ccf,ql:DB.ql,products:DB.products,sessions:DB.sessions,recurringTemplates:DB.recurringTemplates}})); }catch{}
+  try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ts:Date.now(), data:{tasks:DB.tasks,cc:DB.cc,att:DB.att,staff:DB.staff,ccf:DB.ccf,ql:DB.ql,products:DB.products,sessions:DB.sessions,recurringTemplates:DB.recurringTemplates,invoices:DB.invoices,returnGroups:DB.returnGroups}})); }catch{}
 }
 function loadCache(){
   try{
@@ -730,6 +755,8 @@ function loadCache(){
     if(!DB.products)DB.products=[];
     if(!DB.sessions)DB.sessions=[];
     if(!DB.recurringTemplates)DB.recurringTemplates=[];
+    if(!DB.invoices)DB.invoices=[];
+    if(!DB.returnGroups)DB.returnGroups=[];
     if(!DB.ql||!DB.ql.length) DB.ql=DEFAULT_QL;
     if(!DB.staff||!DB.staff.length) DB.staff=[{id:'s1',name:'Store Staff',role:'Store Assistant'}];
     return age < CACHE_TTL; // true = fresh enough, false = stale but usable
@@ -805,13 +832,15 @@ function parseRows(s,rows){
   if(s==='Products') return data.map(r=>({id:r[0],name:r[1],barcode:r[2]||'',cat:r[3]||'',unit:r[4]||'pcs',price:parseFloat(r[5])||0,updatedAt:r[6]||''}));
   if(s==='Sessions'){return data.map(r=>{try{const d=JSON.parse(r[7]||'{}');return{...d,id:r[0],name:r[1],type:r[2],date:r[3],status:r[4],createdBy:r[5],closedAt:r[6]||''};}catch{return{id:r[0],name:r[1],type:r[2],date:r[3],status:r[4],createdBy:r[5],closedAt:'',items:[],productSnapshot:[]}}});}
   if(s==='Recurring') return data.map(r=>({id:r[0],title:r[1],desc:r[2]||'',recurrence:r[3],assignedTo:r[4],priority:r[5]||'medium',status:r[6]||'active',due:r[7]||'',lastDue:r[8]||null}));
+  if(s==='Invoices'){return data.map(r=>{try{return JSON.parse(r[1]||'{}')}catch{return null}}).filter(Boolean);}
+  if(s==='ReturnGroups'){return data.map(r=>{try{return JSON.parse(r[1]||'{}')}catch{return null}}).filter(Boolean);}
   return null;
 }
 
 async function loadAll(){
   sync('syncing','Loading data...');
   // Load all sheets in parallel for speed
-  const sheets=['Tasks','CC','Att','Staff','MM','RT','CCF','QL','Products','Sessions','Recurring'];
+  const sheets=['Tasks','CC','Att','Staff','CCF','QL','Products','Sessions','Recurring','Invoices','ReturnGroups'];
   const results=await Promise.all(sheets.map(s=>gsRead(s)));
   let loaded=0;
   sheets.forEach((s,i)=>{
@@ -830,6 +859,8 @@ async function loadAll(){
         else if(s==='Products')DB.products=p;
         else if(s==='Sessions')DB.sessions=p;
         else if(s==='Recurring')DB.recurringTemplates=p;
+        else if(s==='Invoices'&&p)DB.invoices=p;
+        else if(s==='ReturnGroups'&&p)DB.returnGroups=p;
         loaded++;
       }
     }
@@ -964,26 +995,47 @@ function delQL(id){
 // ═══════════════════════════════════════════
 // TASKS
 // ═══════════════════════════════════════════
-function openTaskModal(){
+function openTaskModal(templateId){
   const d=new Date();d.setDate(d.getDate()+1);d.setHours(10,0);
   document.getElementById('t-due').value=d.toISOString().slice(0,16);
   document.getElementById('t-ttl').value='';
   document.getElementById('t-desc').value='';
+  document.getElementById('t-is-recurring').checked=false;
+  document.getElementById('recurring-fields').style.display='none';
+  document.getElementById('t-rec-num').value='1';
+  document.getElementById('t-rec-unit').value='weeks';
   // Populate assign dropdown: Manager + all staff
   const sel=document.getElementById('t-assign');
   sel.innerHTML='<option value="Manager">👑 Manager</option>'+DB.staff.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
-  // Pre-select current user if staff
   if(role==='staff'){const me=DB.staff[0];if(me)sel.value=me.name;}
   document.getElementById('m-task').classList.add('open');
 }
 
 async function saveTask(){
   const ttl=document.getElementById('t-ttl').value.trim();const due=document.getElementById('t-due').value;
-  if(!ttl||!due){toast('Fill title and due date.');return}
+  if(!ttl||!due){toast('Fill title and due date.');return;}
   busy('tsavebtn',true);
-  DB.tasks.push({id:Date.now().toString(),title:ttl,desc:document.getElementById('t-desc').value.trim(),due,priority:document.getElementById('t-pri').value,status:'pending',createdAt:new Date().toISOString(),completedAt:'',completionNote:'',assignedTo:document.getElementById('t-assign').value,createdBy:role==='manager'?'Manager':DB.staff[0]?.name||'Staff'});
+  const isRec=document.getElementById('t-is-recurring').checked;
+  const recNum=parseInt(document.getElementById('t-rec-num').value)||1;
+  const recUnit=document.getElementById('t-rec-unit').value;
+  const recurrence=isRec?{num:recNum,unit:recUnit}:null;
+  DB.tasks.push({
+    id:Date.now().toString(),
+    title:ttl,
+    desc:document.getElementById('t-desc').value.trim(),
+    due,
+    priority:document.getElementById('t-pri').value,
+    status:'pending',
+    createdAt:new Date().toISOString(),
+    completedAt:'',
+    completionNote:'',
+    assignedTo:document.getElementById('t-assign').value,
+    createdBy:role==='manager'?'Manager':DB.staff[0]?.name||'Staff',
+    recurrence:recurrence?JSON.stringify(recurrence):''
+  });
   schedSync('Tasks');cm('m-task');renderTasks();
-  busy('tsavebtn',false,'Create Task');toast('Task created ✓','ok');
+  busy('tsavebtn',false,'Create Task');
+  toast(isRec?'Recurring task created ✓ — next will auto-create when done':'Task created ✓','ok');
 }
 
 function setFilter(f,btn){filter=f;document.querySelectorAll('.fb').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderTasks()}
@@ -1012,11 +1064,12 @@ function renderTasks(){
     const stl={pending:'','in-progress':'ip',done:'dn'}[t.status];
     const stlbl={pending:'Pending','in-progress':'In Progress',done:'✓ Done'}[t.status];
     const assignTag=t.assignedTo?`<span class="tassigned">👤 ${esc(t.assignedTo)}</span>`:'';
+    const recTag=t.recurrence?`<span style="background:var(--blue-l);color:var(--blue);padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:700">🔁 Recurring</span>`:'';
     const sb=t.status!=='done'?`${t.status==='pending'?`<button class="acbtn acpr" onclick="updTask('${t.id}','in-progress')">▶ Start</button>`:''}<button class="acbtn acdo" onclick="showNotes('${t.id}')">✓ Done</button>`:'';
     const mb=role==='manager'?`<button class="acbtn acdl" onclick="delTask('${t.id}')">🗑</button>`:'';
     const dd=t.status==='done'?`<div class="donedisplay">✓ ${new Date(t.completedAt).toLocaleDateString('en-IN')}${t.completionNote?` — "${esc(t.completionNote)}"`:''}</div>`:'';
     return `<div class="tcard p${t.priority[0]} ${t.status==='done'?'done':''}">
-      <div><div class="ttop"><span class="ttitle">${esc(t.title)}</span><span class="ptag ${t.priority[0]}">${t.priority}</span><span class="stag ${stl}">${stlbl}</span>${assignTag}</div>${t.desc?`<div class="tdesc">${esc(t.desc)}</div>`:''}<div class="tmeta"><span class="${isOD?'ov':''}">📅 ${ds}${isOD?' · OVERDUE':''}</span>${t.createdBy?`<span>Created by ${esc(t.createdBy)}</span>`:''}</div>${dd}<div class="notesarea" id="na-${t.id}"><textarea id="nt-${t.id}" placeholder="Completion note (optional)..."></textarea><button class="nsubmit" onclick="complTask('${t.id}')">✓ Confirm</button></div></div>
+      <div><div class="ttop"><span class="ttitle">${esc(t.title)}</span><span class="ptag ${t.priority[0]}">${t.priority}</span><span class="stag ${stl}">${stlbl}</span>${assignTag}${recTag}</div>${t.desc?`<div class="tdesc">${esc(t.desc)}</div>`:''}<div class="tmeta"><span class="${isOD?'ov':''}">📅 ${ds}${isOD?' · OVERDUE':''}</span>${t.createdBy?`<span>Created by ${esc(t.createdBy)}</span>`:''}</div>${dd}<div class="notesarea" id="na-${t.id}"><textarea id="nt-${t.id}" placeholder="Completion note (optional)..."></textarea><button class="nsubmit" onclick="complTask('${t.id}')">✓ Confirm</button></div></div>
       <div class="tactns">${sb}${mb}</div></div>`;
   }).join('');
 }
@@ -1026,8 +1079,31 @@ function showNotes(id){document.getElementById('na-'+id).style.display='block'}
 function complTask(id){
   const t=DB.tasks.find(r=>r.id===id);if(!t)return;
   t.status='done';t.completedAt=new Date().toISOString();t.completionNote=document.getElementById('nt-'+id)?.value?.trim()||'';
-  schedSync('Tasks');renderTasks();toast('Task completed ✓','ok');
-  toastWA(`✅ Task Completed!\n\n📋 ${t.title}\nAssigned to: ${t.assignedTo||'—'}\n📝 ${t.completionNote||'No note.'}\n🕐 ${new Date(t.completedAt).toLocaleString('en-IN')}`);
+  // Auto-create next occurrence if recurring
+  if(t.recurrence){
+    try{
+      const rec=JSON.parse(t.recurrence);
+      const next=new Date(t.due);
+      if(rec.unit==='days') next.setDate(next.getDate()+rec.num);
+      else if(rec.unit==='weeks') next.setDate(next.getDate()+rec.num*7);
+      else if(rec.unit==='months') next.setMonth(next.getMonth()+rec.num);
+      else if(rec.unit==='years') next.setFullYear(next.getFullYear()+rec.num);
+      DB.tasks.push({
+        id:Date.now().toString(),
+        title:t.title,desc:t.desc||'',
+        due:next.toISOString().slice(0,16),
+        priority:t.priority,status:'pending',
+        createdAt:new Date().toISOString(),completedAt:'',completionNote:'',
+        assignedTo:t.assignedTo,createdBy:'Recurring',
+        recurrence:t.recurrence
+      });
+      toast('Task done ✓ — next occurrence created for '+next.toLocaleDateString('en-IN',{day:'numeric',month:'short'}),'ok');
+    }catch{toast('Task completed ✓','ok');}
+  } else {
+    toast('Task completed ✓','ok');
+  }
+  schedSync('Tasks');renderTasks();
+  toastWA('✅ Task Completed!\n\n📋 '+t.title+'\nAssigned to: '+(t.assignedTo||'—')+'\n📝 '+(t.completionNote||'No note.')+'\n🕐 '+new Date(t.completedAt).toLocaleString('en-IN'));
 }
 function delTask(id){if(!confirm('Delete this task?'))return;DB.tasks=DB.tasks.filter(t=>t.id!==id);schedSync('Tasks');renderTasks();toast('Deleted.')}
 
@@ -1380,34 +1456,399 @@ function delStaff(id){if(!confirm('Remove this staff member?'))return;DB.staff=D
 // ═══════════════════════════════════════════
 // MISMATCHES
 // ═══════════════════════════════════════════
-function openMM(id){document.getElementById('m-mm').classList.add('open');document.getElementById('mm-id').value=id||'';if(id){const r=DB.mm.find(r=>r.id===id);if(!r)return;['date','type','sup','item','inv','rec','stat','cn','rem'].forEach(k=>{const el=document.getElementById('mm-'+k);if(el)el.value=r[k]||''})}else{document.getElementById('mm-date').value=td();['mm-sup','mm-item','mm-inv','mm-rec','mm-cn','mm-rem'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});document.getElementById('mm-type').value='short';document.getElementById('mm-stat').value='pending'}}
-async function saveMM(){const sup=document.getElementById('mm-sup').value.trim();const item=document.getElementById('mm-item').value.trim();const inv=parseInt(document.getElementById('mm-inv').value);const rec2=parseInt(document.getElementById('mm-rec').value);if(!sup||!item||isNaN(inv)||isNaN(rec2)){toast('Fill all required fields.');return}busy('mmsavebtn',true);const eid=document.getElementById('mm-id').value;const r={id:eid||Date.now().toString(),date:document.getElementById('mm-date').value,type:document.getElementById('mm-type').value,sup,item,inv,rec:rec2,stat:document.getElementById('mm-stat').value,cn:document.getElementById('mm-cn').value.trim(),rem:document.getElementById('mm-rem').value.trim()};if(eid){const i=DB.mm.findIndex(r=>r.id===eid);if(i>-1)DB.mm[i]=r}else DB.mm.unshift(r);schedSync('MM');cm('m-mm');renderMM();busy('mmsavebtn',false);toast('Saved ✓','ok')}
-function delMM(id){if(!confirm('Delete?'))return;DB.mm=DB.mm.filter(r=>r.id!==id);schedSync('MM');renderMM();toast('Deleted.')}
-function renderMM(){
-  let recs=DB.mm;const s=(document.getElementById('mm-srch')?.value||'').toLowerCase();const tf=document.getElementById('mm-tf')?.value||'';const sf=document.getElementById('mm-sf')?.value||'';
-  if(s)recs=recs.filter(r=>r.sup.toLowerCase().includes(s)||r.item.toLowerCase().includes(s));if(tf)recs=recs.filter(r=>r.type===tf);if(sf)recs=recs.filter(r=>r.stat===sf);
-  const all=DB.mm;document.getElementById('mm-pd').textContent=all.filter(r=>r.stat==='pending').length;document.getElementById('mm-pt').textContent=all.filter(r=>r.stat==='partial').length;document.getElementById('mm-rs').textContent=all.filter(r=>r.stat==='resolved').length;document.getElementById('mm-su').textContent=all.filter(r=>r.type==='short').reduce((s,r)=>s+(r.inv-r.rec),0);
-  const tbody=document.getElementById('mmbody');const isM=role==='manager';
-  if(!recs.length){tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted)">No mismatches logged yet.</td></tr>';return}
-  const tl={short:'Short',excess:'Excess',wrong:'Wrong'};const tp={short:'psh',excess:'pex',wrong:'pwr'};const sp2={pending:'pp',partial:'pt',resolved:'pr'};
-  tbody.innerHTML=recs.map(r=>{const d=r.rec-r.inv;return`<tr><td>${r.date}</td><td><strong>${esc(r.sup)}</strong></td><td>${esc(r.item)}</td><td><span class="pill ${tp[r.type]}">${tl[r.type]}</span></td><td style="text-align:center">${r.inv}</td><td style="text-align:center">${r.rec}</td><td style="text-align:center;font-weight:700;color:${d<0?'var(--red)':'var(--purple)'}">${d>0?'+':''}${d}</td><td><span class="pill ${sp2[r.stat]}">${r.stat}</span></td><td>${esc(r.cn||'')}${r.rem?`<br><small style="color:var(--muted)">${esc(r.rem)}</small>`:''}</td><td>${isM?`<button class="tbtn te" onclick="openMM('${r.id}')">✏️</button><button class="tbtn td" onclick="delMM('${r.id}')">🗑</button>`:'—'}</td></tr>`}).join('');
+
+// ─── INVOICE MISMATCHES (grouped by invoice) ───
+let invItemsBuffer = [];
+let rgItemsBuffer = [];
+
+function openInvoiceModal(id){
+  document.getElementById('m-invoice').classList.add('open');
+  document.getElementById('inv-edit-id').value=id||'';
+  if(id){
+    const inv=(DB.invoices||[]).find(x=>x.id===id);
+    if(!inv)return;
+    document.getElementById('inv-no').value=inv.invoiceNo||'';
+    document.getElementById('inv-sup').value=inv.supplier||'';
+    document.getElementById('inv-date').value=inv.date?inv.date.slice(0,10):'';
+    invItemsBuffer=[...( inv.items||[]).map(i=>({...i}))];
+  } else {
+    document.getElementById('inv-no').value='';
+    document.getElementById('inv-sup').value='';
+    document.getElementById('inv-date').value=td();
+    invItemsBuffer=[];
+  }
+  ['inv-new-item','inv-new-inv','inv-new-rec'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+  document.getElementById('inv-new-type').value='short';
+  renderInvItemsList();
 }
 
-// ═══════════════════════════════════════════
-// RETURNS
-// ═══════════════════════════════════════════
-function openRT(id){document.getElementById('m-rt').classList.add('open');document.getElementById('rt-id').value=id||'';if(id){const r=DB.rt.find(r=>r.id===id);if(!r)return;['date','rsn','sup','item','qty','res','stat','ref','notes'].forEach(k=>{const el=document.getElementById('rt-'+k);if(el)el.value=r[k]||''})}else{document.getElementById('rt-date').value=td();['rt-sup','rt-item','rt-qty','rt-ref','rt-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});document.getElementById('rt-rsn').value='damaged';document.getElementById('rt-res').value='credit-note';document.getElementById('rt-stat').value='pending'}}
-async function saveRT(){const sup=document.getElementById('rt-sup').value.trim();const item=document.getElementById('rt-item').value.trim();const qty=parseInt(document.getElementById('rt-qty').value);if(!sup||!item||isNaN(qty)||qty<1){toast('Fill all required fields.');return}busy('rtsavebtn',true);const eid=document.getElementById('rt-id').value;const r={id:eid||Date.now().toString(),date:document.getElementById('rt-date').value,rsn:document.getElementById('rt-rsn').value,sup,item,qty,res:document.getElementById('rt-res').value,stat:document.getElementById('rt-stat').value,ref:document.getElementById('rt-ref').value.trim(),notes:document.getElementById('rt-notes').value.trim()};if(eid){const i=DB.rt.findIndex(r=>r.id===eid);if(i>-1)DB.rt[i]=r}else DB.rt.unshift(r);schedSync('RT');cm('m-rt');renderRT();busy('rtsavebtn',false);toast('Saved ✓','ok')}
-function delRT(id){if(!confirm('Delete?'))return;DB.rt=DB.rt.filter(r=>r.id!==id);schedSync('RT');renderRT();toast('Deleted.')}
-function renderRT(){
-  let recs=DB.rt;const s=(document.getElementById('rt-srch')?.value||'').toLowerCase();const rf=document.getElementById('rt-rf')?.value||'';const sf=document.getElementById('rt-sf')?.value||'';
-  if(s)recs=recs.filter(r=>r.sup.toLowerCase().includes(s)||r.item.toLowerCase().includes(s));if(rf)recs=recs.filter(r=>r.rsn===rf);if(sf)recs=recs.filter(r=>r.stat===sf);
-  const all=DB.rt;document.getElementById('rt-pd').textContent=all.filter(r=>r.stat==='pending').length;document.getElementById('rt-pt').textContent=all.filter(r=>r.stat==='partial').length;document.getElementById('rt-rs').textContent=all.filter(r=>r.stat==='resolved').length;document.getElementById('rt-tq').textContent=all.reduce((s,r)=>s+r.qty,0);
-  const tbody=document.getElementById('rtbody');const isM=role==='manager';
-  if(!recs.length){tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted)">No returns logged yet.</td></tr>';return}
-  const rl={damaged:'Damaged',expired:'Expired',wrong:'Wrong Item',overstock:'Overstock'};const rp={damaged:'pdm',expired:'pep',wrong:'pwr',overstock:'pos'};const resl={'credit-note':'Credit Note',replacement:'Replacement',refund:'Cash Refund',tbd:'TBD'};const sp3={pending:'pp',partial:'pt',resolved:'pr'};
-  tbody.innerHTML=recs.map(r=>`<tr><td>${r.date}</td><td><strong>${esc(r.sup)}</strong></td><td>${esc(r.item)}</td><td><span class="pill ${rp[r.rsn]}">${rl[r.rsn]}</span></td><td style="text-align:center">${r.qty}</td><td>${resl[r.res]||r.res}</td><td><span class="pill ${sp3[r.stat]}">${r.stat}</span></td><td>${esc(r.ref||'—')}</td><td><small style="color:var(--muted)">${esc(r.notes||'—')}</small></td><td>${isM?`<button class="tbtn te" onclick="openRT('${r.id}')">✏️</button><button class="tbtn td" onclick="delRT('${r.id}')">🗑</button>`:'—'}</td></tr>`).join('');
+function renderInvItemsList(){
+  const list=document.getElementById('inv-items-list');
+  if(!invItemsBuffer.length){list.innerHTML='<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No items yet — add one below.</div>';return;}
+  const tl={short:'Short',excess:'Excess',wrong:'Wrong'};
+  const tp={short:'psh',excess:'pex',wrong:'pwr'};
+  list.innerHTML=invItemsBuffer.map((item,idx)=>{
+    const diff=item.rec-item.inv;
+    return `<div style="display:grid;grid-template-columns:1fr 70px 60px 60px 60px auto;gap:8px;align-items:center;background:var(--cream);padding:9px 12px;border-radius:var(--rs)">
+      <span style="font-size:13px;font-weight:500">${esc(item.item)}</span>
+      <span><span class="pill ${tp[item.type]}">${tl[item.type]}</span></span>
+      <span style="text-align:center;font-size:12.5px">${item.inv}</span>
+      <span style="text-align:center;font-size:12.5px">${item.rec}</span>
+      <span style="text-align:center;font-weight:700;color:${diff<0?'var(--red)':'var(--purple)'}">${diff>0?'+':''}${diff}</span>
+      <button onclick="removeInvItem(${idx})" style="background:none;border:none;cursor:pointer;color:var(--red-l);font-size:14px" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--red-l)'">✕</button>
+    </div>`;
+  }).join('');
 }
+
+function addInvItem(){
+  const item=document.getElementById('inv-new-item').value.trim();
+  const inv=parseInt(document.getElementById('inv-new-inv').value)||0;
+  const rec=parseInt(document.getElementById('inv-new-rec').value)||0;
+  if(!item){toast('Enter item name.');return;}
+  invItemsBuffer.push({id:'ii'+Date.now(),item,type:document.getElementById('inv-new-type').value,inv,rec,stat:'pending',cn:'',rem:''});
+  document.getElementById('inv-new-item').value='';
+  document.getElementById('inv-new-inv').value='';
+  document.getElementById('inv-new-rec').value='';
+  document.getElementById('inv-new-item').focus();
+  renderInvItemsList();
+}
+
+function removeInvItem(idx){invItemsBuffer.splice(idx,1);renderInvItemsList();}
+
+async function saveInvoice(){
+  const invoiceNo=document.getElementById('inv-no').value.trim();
+  const supplier=document.getElementById('inv-sup').value.trim();
+  const date=document.getElementById('inv-date').value;
+  if(!invoiceNo||!supplier||!date){toast('Fill invoice no, supplier and date.');return;}
+  if(!invItemsBuffer.length){toast('Add at least one item.');return;}
+  busy('invsavebtn',true);
+  if(!DB.invoices)DB.invoices=[];
+  const eid=document.getElementById('inv-edit-id').value;
+  const inv={id:eid||'inv'+Date.now(),invoiceNo,supplier,date,items:invItemsBuffer,createdAt:new Date().toISOString()};
+  if(eid){const i=DB.invoices.findIndex(x=>x.id===eid);if(i>-1)DB.invoices[i]=inv;}
+  else DB.invoices.unshift(inv);
+  schedSync('Invoices');cm('m-invoice');renderMM();
+  busy('invsavebtn',false);toast('Invoice saved ✓','ok');
+}
+
+function delInvoice(id){
+  if(!confirm('Delete this invoice and all its items?'))return;
+  DB.invoices=(DB.invoices||[]).filter(x=>x.id!==id);
+  schedSync('Invoices');renderMM();toast('Deleted.');
+}
+
+function toggleInvoice(id){
+  const body=document.getElementById('inv-body-'+id);
+  const hdr=document.getElementById('inv-hdr-'+id);
+  const tog=document.getElementById('inv-tog-'+id);
+  if(!body)return;
+  const isOpen=body.classList.contains('open');
+  body.classList.toggle('open',!isOpen);
+  hdr.classList.toggle('open',!isOpen);
+  if(tog)tog.classList.toggle('open',!isOpen);
+}
+
+function updateItemStat(invId,itemId,stat){
+  const inv=(DB.invoices||[]).find(x=>x.id===invId);
+  if(!inv)return;
+  const item=inv.items.find(x=>x.id===itemId);
+  if(item)item.stat=stat;
+  schedSync('Invoices');renderMM();
+}
+
+function updateItemCN(invId,itemId,cn){
+  const inv=(DB.invoices||[]).find(x=>x.id===invId);
+  if(!inv)return;
+  const item=inv.items.find(x=>x.id===itemId);
+  if(item)item.cn=cn;
+  schedSync('Invoices');
+}
+
+function clearMMFilters(){
+  ['mm-srch','mm-date-from','mm-date-to'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+  document.getElementById('mm-sf').value='';
+  renderMM();
+}
+
+function renderMM(){
+  if(!DB.invoices)DB.invoices=[];
+  let invs=DB.invoices;
+  const s=(document.getElementById('mm-srch')?.value||'').toLowerCase();
+  const df=document.getElementById('mm-date-from')?.value||'';
+  const dt=document.getElementById('mm-date-to')?.value||'';
+  const sf=document.getElementById('mm-sf')?.value||'';
+
+  if(s)invs=invs.filter(inv=>inv.supplier.toLowerCase().includes(s)||inv.invoiceNo.toLowerCase().includes(s));
+  if(df)invs=invs.filter(inv=>inv.date.slice(0,10)>=df);
+  if(dt)invs=invs.filter(inv=>inv.date.slice(0,10)<=dt);
+  if(sf)invs=invs.filter(inv=>inv.items.some(i=>i.stat===sf));
+
+  // Stats across all invoices
+  const allItems=(DB.invoices||[]).flatMap(inv=>inv.items||[]);
+  document.getElementById('mm-pd').textContent=allItems.filter(i=>i.stat==='pending').length;
+  document.getElementById('mm-pt').textContent=allItems.filter(i=>i.stat==='partial').length;
+  document.getElementById('mm-rs').textContent=allItems.filter(i=>i.stat==='resolved').length;
+  document.getElementById('mm-su').textContent=allItems.filter(i=>i.type==='short').reduce((s,i)=>s+(i.inv-i.rec),0);
+
+  const container=document.getElementById('mm-invoice-list');
+  if(!invs.length){container.innerHTML='<div class="empty"><div class="ei">⚖️</div><p>No invoices yet. Click "+ Add Invoice" to log a mismatch.</p></div>';return;}
+
+  const isM=role==='manager';
+  const tl={short:'Short',excess:'Excess',wrong:'Wrong'};
+  const tp={short:'psh',excess:'pex',wrong:'pwr'};
+  const sp={pending:'pp',partial:'pt',resolved:'pr'};
+
+  container.innerHTML=invs.map(inv=>{
+    const items=inv.items||[];
+    const pending=items.filter(i=>i.stat==='pending').length;
+    const resolved=items.filter(i=>i.stat==='resolved').length;
+    const dateStr=inv.date?new Date(inv.date.slice(0,10)+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'—';
+    const overallPill=resolved===items.length&&items.length>0?'<span class="pill pr">All Resolved</span>':pending>0?`<span class="pill pp">${pending} Pending</span>`:'<span class="pill pt">Partial</span>';
+
+    const itemRows=items.map(item=>{
+      const diff=item.rec-item.inv;
+      return `<div class="inv-item-row">
+        <div>${esc(item.item)}</div>
+        <div><span class="pill ${tp[item.type]}">${tl[item.type]}</span></div>
+        <div style="justify-content:center">${item.inv}</div>
+        <div style="justify-content:center">${item.rec}</div>
+        <div style="justify-content:center;font-weight:700;color:${diff<0?'var(--red)':'var(--purple)'}">${diff>0?'+':''}${diff}</div>
+        <div>
+          <select onchange="updateItemStat('${inv.id}','${item.id}',this.value)" style="font-size:11.5px;padding:3px 6px;border:1px solid var(--cream-dark);border-radius:5px;background:var(--cream);cursor:pointer">
+            <option value="pending" ${item.stat==='pending'?'selected':''}>Pending</option>
+            <option value="partial" ${item.stat==='partial'?'selected':''}>Partial</option>
+            <option value="resolved" ${item.stat==='resolved'?'selected':''}>Resolved</option>
+          </select>
+        </div>
+        <div><input type="text" value="${esc(item.cn||'')}" placeholder="Credit Note No." onchange="updateItemCN('${inv.id}','${item.id}',this.value)" style="width:100%;font-size:11.5px;padding:3px 7px;border:1px solid var(--cream-dark);border-radius:5px;background:var(--cream)"></div>
+        <div style="color:var(--muted);font-size:11px"><span class="pill ${sp[item.stat]}">${item.stat}</span></div>
+      </div>`;
+    }).join('');
+
+    return `<div class="inv-card">
+      <div class="inv-card-hdr" id="inv-hdr-${inv.id}" onclick="toggleInvoice('${inv.id}')">
+        <div class="inv-hdr-left">
+          <span class="inv-toggle" id="inv-tog-${inv.id}">▼</span>
+          <span class="inv-no">📄 ${esc(inv.invoiceNo)}</span>
+          <span class="inv-supplier">— ${esc(inv.supplier)}</span>
+          <span class="inv-date">${dateStr}</span>
+        </div>
+        <div class="inv-summary">
+          <span style="font-size:12px;color:var(--muted)">${items.length} item${items.length!==1?'s':''}</span>
+          ${overallPill}
+          ${isM?`<button class="tbtn te" onclick="event.stopPropagation();openInvoiceModal('${inv.id}')">✏️ Edit</button><button class="tbtn td" onclick="event.stopPropagation();delInvoice('${inv.id}')">🗑</button>`:''}
+        </div>
+      </div>
+      <div class="inv-body" id="inv-body-${inv.id}">
+        <div class="inv-item-row inv-item-hdr">
+          <div>Item</div><div>Type</div><div>Invoiced</div><div>Received</div><div>Diff</div><div>Status</div><div>Credit Note</div><div></div>
+        </div>
+        ${itemRows}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function exportMMCSV(){
+  const h=['Invoice No','Supplier','Date','Item','Type','Invoiced','Received','Diff','Status','Credit Note'];
+  const rows=[];
+  (DB.invoices||[]).forEach(inv=>{
+    (inv.items||[]).forEach(item=>{
+      const diff=item.rec-item.inv;
+      const dateStr=inv.date?inv.date.slice(0,10):'';
+      rows.push([inv.invoiceNo,inv.supplier,dateStr,item.item,item.type,item.inv,item.rec,diff,item.stat,item.cn||'']);
+    });
+  });
+  const csv=[h,...rows].map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='invoice_mismatches.csv';a.click();toast('Exported ✓','ok');
+}
+
+// ─── STOCK RETURNS (grouped by supplier+date) ───
+function openReturnGroupModal(id){
+  document.getElementById('m-retgroup').classList.add('open');
+  document.getElementById('rg-edit-id').value=id||'';
+  if(id){
+    const rg=(DB.returnGroups||[]).find(x=>x.id===id);
+    if(!rg)return;
+    document.getElementById('rg-date').value=rg.date?rg.date.slice(0,10):'';
+    document.getElementById('rg-sup').value=rg.supplier||'';
+    document.getElementById('rg-notes').value=rg.notes||'';
+    rgItemsBuffer=[...(rg.items||[]).map(i=>({...i}))];
+  } else {
+    document.getElementById('rg-date').value=td();
+    document.getElementById('rg-sup').value='';
+    document.getElementById('rg-notes').value='';
+    rgItemsBuffer=[];
+  }
+  ['rg-new-item','rg-new-qty'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+  document.getElementById('rg-new-rsn').value='damaged';
+  document.getElementById('rg-new-res').value='credit-note';
+  renderRGItemsList();
+}
+
+function renderRGItemsList(){
+  const list=document.getElementById('rg-items-list');
+  if(!rgItemsBuffer.length){list.innerHTML='<div style="text-align:center;padding:14px;color:var(--muted);font-size:13px">No items yet — add one below.</div>';return;}
+  const rl={damaged:'Damaged',expired:'Expired',wrong:'Wrong Item',overstock:'Overstock'};
+  const rp={damaged:'pdm',expired:'pep',wrong:'pwr',overstock:'pos'};
+  const resl={'credit-note':'Credit Note',replacement:'Replacement',refund:'Refund',tbd:'TBD'};
+  list.innerHTML=rgItemsBuffer.map((item,idx)=>`
+    <div style="display:grid;grid-template-columns:1fr 80px 50px 100px auto;gap:8px;align-items:center;background:var(--cream);padding:9px 12px;border-radius:var(--rs)">
+      <span style="font-size:13px;font-weight:500">${esc(item.item)}</span>
+      <span><span class="pill ${rp[item.rsn]}">${rl[item.rsn]}</span></span>
+      <span style="text-align:center;font-size:12.5px;font-weight:600">${item.qty}</span>
+      <span style="font-size:12px;color:var(--muted)">${resl[item.res]||item.res}</span>
+      <button onclick="removeRGItem(${idx})" style="background:none;border:none;cursor:pointer;color:var(--red-l);font-size:14px" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--red-l)'">✕</button>
+    </div>`).join('');
+}
+
+function addRGItem(){
+  const item=document.getElementById('rg-new-item').value.trim();
+  const qty=parseInt(document.getElementById('rg-new-qty').value)||0;
+  if(!item||qty<1){toast('Enter item name and quantity.');return;}
+  rgItemsBuffer.push({id:'ri'+Date.now(),item,rsn:document.getElementById('rg-new-rsn').value,qty,res:document.getElementById('rg-new-res').value,stat:'pending'});
+  document.getElementById('rg-new-item').value='';
+  document.getElementById('rg-new-qty').value='';
+  document.getElementById('rg-new-item').focus();
+  renderRGItemsList();
+}
+
+function removeRGItem(idx){rgItemsBuffer.splice(idx,1);renderRGItemsList();}
+
+async function saveReturnGroup(){
+  const date=document.getElementById('rg-date').value;
+  const supplier=document.getElementById('rg-sup').value.trim();
+  if(!date||!supplier){toast('Fill date and supplier.');return;}
+  if(!rgItemsBuffer.length){toast('Add at least one item.');return;}
+  busy('rgsavebtn',true);
+  if(!DB.returnGroups)DB.returnGroups=[];
+  const eid=document.getElementById('rg-edit-id').value;
+  const rg={id:eid||'rg'+Date.now(),date,supplier,notes:document.getElementById('rg-notes').value.trim(),items:rgItemsBuffer,createdAt:new Date().toISOString()};
+  if(eid){const i=DB.returnGroups.findIndex(x=>x.id===eid);if(i>-1)DB.returnGroups[i]=rg;}
+  else DB.returnGroups.unshift(rg);
+  schedSync('ReturnGroups');cm('m-retgroup');renderRT();
+  busy('rgsavebtn',false);toast('Return saved ✓','ok');
+}
+
+function delReturnGroup(id){
+  if(!confirm('Delete this return and all its items?'))return;
+  DB.returnGroups=(DB.returnGroups||[]).filter(x=>x.id!==id);
+  schedSync('ReturnGroups');renderRT();toast('Deleted.');
+}
+
+function toggleRG(id){
+  const body=document.getElementById('rg-body-'+id);
+  const hdr=document.getElementById('rg-hdr-'+id);
+  const tog=document.getElementById('rg-tog-'+id);
+  if(!body)return;
+  const isOpen=body.classList.contains('open');
+  body.classList.toggle('open',!isOpen);
+  hdr.classList.toggle('open',!isOpen);
+  if(tog)tog.classList.toggle('open',!isOpen);
+}
+
+function updateRGItemStat(rgId,itemId,stat){
+  const rg=(DB.returnGroups||[]).find(x=>x.id===rgId);
+  if(!rg)return;
+  const item=rg.items.find(x=>x.id===itemId);
+  if(item)item.stat=stat;
+  schedSync('ReturnGroups');renderRT();
+}
+
+function clearRTFilters(){
+  ['rt-srch','rt-date-from','rt-date-to'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+  document.getElementById('rt-sf').value='';
+  renderRT();
+}
+
+function renderRT(){
+  if(!DB.returnGroups)DB.returnGroups=[];
+  let rgs=DB.returnGroups;
+  const s=(document.getElementById('rt-srch')?.value||'').toLowerCase();
+  const df=document.getElementById('rt-date-from')?.value||'';
+  const dt=document.getElementById('rt-date-to')?.value||'';
+  const sf=document.getElementById('rt-sf')?.value||'';
+
+  if(s)rgs=rgs.filter(rg=>rg.supplier.toLowerCase().includes(s));
+  if(df)rgs=rgs.filter(rg=>rg.date.slice(0,10)>=df);
+  if(dt)rgs=rgs.filter(rg=>rg.date.slice(0,10)<=dt);
+  if(sf)rgs=rgs.filter(rg=>rg.items.some(i=>i.stat===sf));
+
+  const allItems=(DB.returnGroups||[]).flatMap(rg=>rg.items||[]);
+  document.getElementById('rt-pd').textContent=allItems.filter(i=>i.stat==='pending').length;
+  document.getElementById('rt-pt').textContent=allItems.filter(i=>i.stat==='partial').length;
+  document.getElementById('rt-rs').textContent=allItems.filter(i=>i.stat==='resolved').length;
+  document.getElementById('rt-tq').textContent=allItems.reduce((s,i)=>s+(i.qty||0),0);
+
+  const container=document.getElementById('rt-group-list');
+  if(!rgs.length){container.innerHTML='<div class="empty"><div class="ei">↩️</div><p>No returns logged yet. Click "+ Add Return" to log one.</p></div>';return;}
+
+  const isM=role==='manager';
+  const rl={damaged:'Damaged',expired:'Expired',wrong:'Wrong Item',overstock:'Overstock'};
+  const rp={damaged:'pdm',expired:'pep',wrong:'pwr',overstock:'pos'};
+  const resl={'credit-note':'Credit Note',replacement:'Replacement',refund:'Refund',tbd:'TBD'};
+  const sp={pending:'pp',partial:'pt',resolved:'pr'};
+
+  container.innerHTML=rgs.map(rg=>{
+    const items=rg.items||[];
+    const pending=items.filter(i=>i.stat==='pending').length;
+    const resolved=items.filter(i=>i.stat==='resolved').length;
+    const totalQty=items.reduce((s,i)=>s+(i.qty||0),0);
+    const dateStr=rg.date?new Date(rg.date.slice(0,10)+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'—';
+    const overallPill=resolved===items.length&&items.length>0?'<span class="pill pr">All Resolved</span>':pending>0?`<span class="pill pp">${pending} Pending</span>`:'<span class="pill pt">Partial</span>';
+
+    const itemRows=items.map(item=>`
+      <div class="inv-item-row">
+        <div>${esc(item.item)}</div>
+        <div><span class="pill ${rp[item.rsn]}">${rl[item.rsn]}</span></div>
+        <div style="justify-content:center;font-weight:600">${item.qty}</div>
+        <div>${resl[item.res]||item.res}</div>
+        <div>
+          <select onchange="updateRGItemStat('${rg.id}','${item.id}',this.value)" style="font-size:11.5px;padding:3px 6px;border:1px solid var(--cream-dark);border-radius:5px;background:var(--cream);cursor:pointer">
+            <option value="pending" ${item.stat==='pending'?'selected':''}>Pending</option>
+            <option value="partial" ${item.stat==='partial'?'selected':''}>Partial</option>
+            <option value="resolved" ${item.stat==='resolved'?'selected':''}>Resolved</option>
+          </select>
+        </div>
+        <div><span class="pill ${sp[item.stat]}">${item.stat}</span></div>
+      </div>`).join('');
+
+    return `<div class="inv-card">
+      <div class="inv-card-hdr" id="rg-hdr-${rg.id}" onclick="toggleRG('${rg.id}')">
+        <div class="inv-hdr-left">
+          <span class="inv-toggle" id="rg-tog-${rg.id}">▼</span>
+          <span class="inv-no">↩️ ${esc(rg.supplier)}</span>
+          <span class="inv-date">${dateStr}</span>
+          ${rg.notes?`<span class="inv-supplier">— ${esc(rg.notes)}</span>`:''}
+        </div>
+        <div class="inv-summary">
+          <span style="font-size:12px;color:var(--muted)">${items.length} item${items.length!==1?'s':''} · ${totalQty} units</span>
+          ${overallPill}
+          ${isM?`<button class="tbtn te" onclick="event.stopPropagation();openReturnGroupModal('${rg.id}')">✏️ Edit</button><button class="tbtn td" onclick="event.stopPropagation();delReturnGroup('${rg.id}')">🗑</button>`:''}
+        </div>
+      </div>
+      <div class="inv-body" id="rg-body-${rg.id}">
+        <div class="inv-item-row inv-item-hdr">
+          <div>Item</div><div>Reason</div><div>Qty</div><div>Resolution</div><div>Status</div><div></div>
+        </div>
+        ${itemRows}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function exportRTCSV(){
+  const h=['Date','Supplier','Item','Reason','Qty','Resolution','Status','Notes'];
+  const rows=[];
+  (DB.returnGroups||[]).forEach(rg=>{
+    (rg.items||[]).forEach(item=>{
+      rows.push([rg.date?rg.date.slice(0,10):'',rg.supplier,item.item,item.rsn,item.qty,item.res,item.stat,rg.notes||'']);
+    });
+  });
+  const csv=[h,...rows].map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='stock_returns.csv';a.click();toast('Exported ✓','ok');
+}
+
 
 // ═══════════════════════════════════════════
 // CSV
@@ -1417,6 +1858,12 @@ function exportCSV(t){let h,rows,fn;if(t==='mm'){h=['Date','Supplier','Item','Ty
 // ═══════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════
+
+function toggleRecurringFields(){
+  const checked=document.getElementById('t-is-recurring').checked;
+  document.getElementById('recurring-fields').style.display=checked?'block':'none';
+}
+
 // Auto-restore session on page load
 window.addEventListener('load', () => {
   try {
@@ -1444,8 +1891,12 @@ window.addEventListener('load', () => {
   } catch(e) { /* no saved session, show login normally */ }
 });
 
-window.addEventListener('click',e=>{['m-ql','m-task','m-mm','m-rt','m-staff','m-exp','m-product','m-newsess','m-recurring'].forEach(id=>{if(e.target===document.getElementById(id))cm(id)})});
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('m-exp').classList.contains('open')){const d=document.getElementById('exp-new-desc').value.trim();const a=document.getElementById('exp-new-amt').value;if(d&&a)addExpItem();}});
+window.addEventListener('click',e=>{['m-ql','m-task','m-mm','m-rt','m-staff','m-exp','m-product','m-newsess','m-invoice','m-retgroup'].forEach(id=>{if(e.target===document.getElementById(id))cm(id)})});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&document.getElementById('m-exp').classList.contains('open')){const d=document.getElementById('exp-new-desc').value.trim();const a=document.getElementById('exp-new-amt').value;if(d&&a)addExpItem();}
+  if(e.key==='Enter'&&document.getElementById('m-invoice').classList.contains('open')&&document.activeElement?.id!=='inv-no'&&document.activeElement?.id!=='inv-sup'){const it=document.getElementById('inv-new-item').value.trim();if(it)addInvItem();}
+  if(e.key==='Enter'&&document.getElementById('m-retgroup').classList.contains('open')&&document.activeElement?.id!=='rg-sup'){const it=document.getElementById('rg-new-item').value.trim();if(it)addRGItem();}
+});
 
 // ═══════════════════════════════════════════
 // INVENTORY MODULE
@@ -1775,7 +2226,7 @@ function viewSession(id){
   document.getElementById('inv-session-view').style.display='block';
   document.getElementById('inv-main-view').style.display='none';
   document.getElementById('sess-count-input').style.display=sess.status==='open'?'block':'none';
-  document.getElementById('close-sess-btn').style.display=sess.status==='open'?'flex':'none';
+  document.getElementById('close-sess-btn').style.display=sess.status==='open'?'inline-flex':'none';
   renderSessionCount();
 }
 
@@ -1962,24 +2413,47 @@ function downloadSampleCSV(){
   <div class="mfooter"><button class="cancelbtn" onclick="cm('m-newsess')">Cancel</button><button class="savebtn" onclick="startSession()">▶ Start Session</button></div>
 </div></div>
 
-<!-- Recurring Task Modal -->
-<div class="moverlay" id="m-recurring"><div class="modal"><h2>🔁 Recurring Task</h2>
-  <input type="hidden" id="rec-id">
-  <div class="fg"><label class="fl">Task Title *</label><input class="fi" type="text" id="rec-title" placeholder="e.g. GST Filing, Weekly Stock Count..."></div>
-  <div class="fg"><label class="fl">Description / Instructions</label><textarea class="fta" id="rec-desc" placeholder="Steps or details for staff..."></textarea></div>
+
+<!-- Invoice Modal (grouped mismatches) -->
+<div class="moverlay" id="m-invoice"><div class="modal" style="width:620px">
+  <h2>⚖️ Invoice Mismatch</h2>
   <div class="frow">
-    <div class="fg"><label class="fl">Frequency *</label><select class="fsel2" id="rec-recurrence">
-      <option value="daily">Daily</option>
-      <option value="weekly">Weekly</option>
-      <option value="monthly" selected>Monthly</option>
-      <option value="bimonthly">Every 2 Months</option>
-      <option value="quarterly">Quarterly</option>
-      <option value="yearly">Yearly</option>
-    </select></div>
-    <div class="fg"><label class="fl">Assigned To</label><select class="fsel2" id="rec-assign"></select></div>
+    <div class="fg"><label class="fl">Invoice No. *</label><input class="fi" type="text" id="inv-no" placeholder="e.g. INV-2025-0456 or 27-Apr-2026"></div>
+    <div class="fg"><label class="fl">Supplier *</label><input class="fi" type="text" id="inv-sup" placeholder="e.g. Timbaktu"></div>
   </div>
-  <div class="fg"><label class="fl">Priority</label><select class="fsel2" id="rec-priority"><option value="high">🔴 High</option><option value="medium" selected>🟡 Medium</option><option value="low">🟢 Low</option></select></div>
-  <div class="mfooter"><button class="cancelbtn" onclick="cm('m-recurring')">Cancel</button><button class="savebtn" id="recsavebtn" onclick="saveRecurring()">Save</button></div>
+  <div class="fg"><label class="fl">Invoice Date *</label><input class="fi" type="date" id="inv-date"></div>
+  <div style="margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Items with Mismatch</div>
+  <div id="inv-items-list" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto;margin-bottom:10px"></div>
+  <div style="background:var(--cream);border-radius:var(--rs);padding:12px;display:grid;grid-template-columns:1fr 100px 100px 110px auto;gap:8px;align-items:end">
+    <div><label class="fl">Item Name</label><input class="fi" type="text" id="inv-new-item" placeholder="e.g. Groundnut Oil 1L"></div>
+    <div><label class="fl">Type</label><select class="fsel2" id="inv-new-type"><option value="short">Short</option><option value="excess">Excess</option><option value="wrong">Wrong</option></select></div>
+    <div><label class="fl">Invoiced</label><input class="fi" type="number" id="inv-new-inv" min="0" placeholder="0"></div>
+    <div><label class="fl">Received</label><input class="fi" type="number" id="inv-new-rec" min="0" placeholder="0"></div>
+    <div style="padding-bottom:1px"><button class="savebtn" onclick="addInvItem()" style="padding:9px 12px;margin-top:14px">+</button></div>
+  </div>
+  <input type="hidden" id="inv-edit-id">
+  <div class="mfooter"><button class="cancelbtn" onclick="cm('m-invoice')">Cancel</button><button class="savebtn" id="invsavebtn" onclick="saveInvoice()">Save Invoice</button></div>
+</div></div>
+
+<!-- Return Group Modal -->
+<div class="moverlay" id="m-retgroup"><div class="modal" style="width:600px">
+  <h2>↩️ Stock Return</h2>
+  <div class="frow">
+    <div class="fg"><label class="fl">Return Date *</label><input class="fi" type="date" id="rg-date"></div>
+    <div class="fg"><label class="fl">Supplier *</label><input class="fi" type="text" id="rg-sup" placeholder="e.g. Timbaktu"></div>
+  </div>
+  <div class="fg"><label class="fl">Notes / Remarks</label><input class="fi" type="text" id="rg-notes" placeholder="e.g. Monthly returns to Timbaktu"></div>
+  <div style="margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Items Returned</div>
+  <div id="rg-items-list" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;margin-bottom:10px"></div>
+  <div style="background:var(--cream);border-radius:var(--rs);padding:12px;display:grid;grid-template-columns:1fr 100px 90px 110px auto;gap:8px;align-items:end">
+    <div><label class="fl">Item Name</label><input class="fi" type="text" id="rg-new-item" placeholder="e.g. Foxtail Millet 500g"></div>
+    <div><label class="fl">Reason</label><select class="fsel2" id="rg-new-rsn"><option value="damaged">Damaged</option><option value="expired">Expired</option><option value="wrong">Wrong</option><option value="overstock">Overstock</option></select></div>
+    <div><label class="fl">Qty</label><input class="fi" type="number" id="rg-new-qty" min="1" placeholder="0"></div>
+    <div><label class="fl">Resolution</label><select class="fsel2" id="rg-new-res"><option value="credit-note">Credit Note</option><option value="replacement">Replacement</option><option value="refund">Refund</option><option value="tbd">TBD</option></select></div>
+    <div><button class="savebtn" onclick="addRGItem()" style="padding:9px 12px;margin-top:14px">+</button></div>
+  </div>
+  <input type="hidden" id="rg-edit-id">
+  <div class="mfooter"><button class="cancelbtn" onclick="cm('m-retgroup')">Cancel</button><button class="savebtn" id="rgsavebtn" onclick="saveReturnGroup()">Save Return</button></div>
 </div></div>
 </body>
 </html>
