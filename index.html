@@ -713,7 +713,10 @@ table.atstbl tr:hover td{background:var(--cream)}
 // ═══════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════
-const GS_URL = 'https://script.google.com/macros/s/AKfycbyfaNn05Ljc1BRcHAwjysmuuA40eSg315R0JVo9snwMy9EoDEwquCGnhYzo_32V-JI0fw/exec';
+const GS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbyfaNn05Ljc1BRcHAwjysmuuA40eSg315R0JVo9snwMy9EoDEwquCGnhYzo_32V-JI0fw/exec';
+function getGSURL(){
+  try{const s=JSON.parse(localStorage.getItem('do_sets')||'{}');return s.gsurl||GS_URL_DEFAULT;}catch{return GS_URL_DEFAULT;}
+}
 const DENOMS = [500,200,100,50,20,10,5,2,1];
 const CACHE_KEY = 'dailyops_cache';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -770,33 +773,23 @@ function sync(state,msg){const d=document.getElementById('sdot');const t=documen
 
 async function gsRead(sheet){
   try{
-    const r=await fetch(GS_URL+'?sheet='+encodeURIComponent(sheet),{
-      redirect:'follow',
-      method:'GET'
-    });
-    const text=await r.text();
-    const d=JSON.parse(text);
+    const url=getGSURL()+'?sheet='+encodeURIComponent(sheet);
+    const r=await fetch(url,{method:'GET',redirect:'follow'});
+    const d=JSON.parse(await r.text());
     return d.rows||[];
-  }catch(e){
-    console.error('gsRead error',sheet,e);
-    return null;
-  }
+  }catch(e){console.error('gsRead',sheet,e);return null;}
 }
 async function gsWrite(sheet,rows){
   try{
-    const r=await fetch(GS_URL,{
+    const r=await fetch(getGSURL(),{
       method:'POST',
       redirect:'follow',
       headers:{'Content-Type':'text/plain'},
       body:JSON.stringify({action:'write',sheet,rows})
     });
-    const text=await r.text();
-    const d=JSON.parse(text);
+    const d=JSON.parse(await r.text());
     return d.success;
-  }catch(e){
-    console.error('gsWrite error',sheet,e);
-    return false;
-  }
+  }catch(e){console.error('gsWrite',sheet,e);return false;}
 }
 
 function schedSync(sheet){syncQueue[sheet]=true;if(syncTimer)clearTimeout(syncTimer);syncTimer=setTimeout(flushSync,900);}
@@ -852,7 +845,18 @@ function parseRows(s,rows){
   if(s==='CCF'){const pays=[],exps=[];data.forEach(r=>{if(r[0]==='pay')pays.push({id:r[1],lbl:r[2]});else if(r[0]==='exp')exps.push({id:r[1],lbl:r[2]})});return{pays,exps};}
   if(s==='QL') return data.map(r=>({id:r[0],name:r[1],icon:r[2],url:r[3],hint:r[4]||''}));
   if(s==='Products') return data.map(r=>({id:r[0],name:r[1],barcode:r[2]||'',cat:r[3]||'',unit:r[4]||'pcs',price:parseFloat(r[5])||0,updatedAt:r[6]||''}));
-  if(s==='Sessions'){return data.map(r=>{try{const d=JSON.parse(r[7]||'{}');return{...d,id:r[0],name:r[1],type:r[2],date:r[3],status:r[4],createdBy:r[5],closedAt:r[6]||''};}catch{return{id:r[0],name:r[1],type:r[2],date:r[3],status:r[4],createdBy:r[5],closedAt:'',items:[],productSnapshot:[]}}});}
+  if(s==='Sessions'){
+    return data.map(r=>{
+      let items=[], snap=[];
+      try{items=JSON.parse(r[7]||'[]');}catch{}
+      try{snap=JSON.parse(r[8]||'[]');}catch{}
+      return{
+        id:r[0],name:r[1],type:r[2]||'',date:r[3],
+        status:r[4]||'open',createdBy:r[5]||'',closedAt:r[6]||'',
+        items:items,productSnapshot:snap
+      };
+    });
+  }
   if(s==='Recurring') return data.map(r=>({id:r[0],title:r[1],desc:r[2]||'',recurrence:r[3],assignedTo:r[4],priority:r[5]||'medium',status:r[6]||'active',due:r[7]||'',lastDue:r[8]||null}));
   if(s==='Invoices'){return data.map(r=>{try{return JSON.parse(r[1]||'{}')}catch{return null}}).filter(Boolean);}
   if(s==='ReturnGroups'){return data.map(r=>{try{return JSON.parse(r[1]||'{}')}catch{return null}}).filter(Boolean);}
@@ -860,17 +864,13 @@ function parseRows(s,rows){
 }
 
 async function loadAll(){
-  sync('syncing','Loading data...');
+  sync('syncing','Loading data from Google Sheets...');
   const sheets=['Tasks','CC','Att','Staff','CCF','QL','Products','Sessions','Recurring','Invoices','ReturnGroups'];
-  // Add timeout so it never hangs forever
-  const withTimeout=(promise,ms=15000)=>Promise.race([promise,new Promise((_,r)=>setTimeout(()=>r(new Error('timeout')),ms))]);
-  let results;
-  try{
-    results=await withTimeout(Promise.all(sheets.map(s=>gsRead(s))));
-  }catch(e){
-    sync('err','⚠️ Could not reach Google Sheets — check connection');
-    console.error('loadAll timeout/error:',e);
-    return;
+  const results=[];
+  for(const s of sheets){
+    const r=await gsRead(s);
+    results.push(r);
+    sync('syncing','Loading... ('+results.length+'/'+sheets.length+')');
   }
   let loaded=0;
   sheets.forEach((s,i)=>{
@@ -898,7 +898,7 @@ async function loadAll(){
   if(!DB.ql||!DB.ql.length) DB.ql=DEFAULT_QL;
   saveCache();
   sync('ok','All data loaded ✓ '+new Date().toLocaleTimeString('en-IN'));
-  renderAll();
+  try{ renderAll(); restoreTab(); }catch(e){ console.error('renderAll error:',e); }
 }
 
 // ═══════════════════════════════════════════
@@ -954,9 +954,12 @@ function loadSets(){
   try{DB.sets=JSON.parse(localStorage.getItem('do_sets'))||{};}catch{}
   try{DB.pw=JSON.parse(localStorage.getItem('do_pw'))||{manager:'admin123',staff:'staff123'};}catch{}
   if(DB.sets.wa)document.getElementById('swa').value=DB.sets.wa;
+  const gsEl=document.getElementById('sgsurl');
+  if(gsEl)gsEl.value=DB.sets.gsurl||GS_URL_DEFAULT;
 }
 function saveSettings(){
-  DB.sets={wa:document.getElementById('swa').value};
+  const gsurl=document.getElementById('sgsurl').value.trim();
+  DB.sets={wa:document.getElementById('swa').value,gsurl:gsurl||GS_URL_DEFAULT};
   localStorage.setItem('do_sets',JSON.stringify(DB.sets));
   const mp=document.getElementById('smpw').value,sp=document.getElementById('sspw').value;
   if(mp)DB.pw.manager=mp;if(sp)DB.pw.staff=sp;
@@ -971,9 +974,40 @@ function togSettings(){const p=document.getElementById('spanel');p.style.display
 function swTab(t,btn){
   document.querySelectorAll('.tabpane').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tablink').forEach(b=>b.classList.remove('active'));
-  document.getElementById('tab-'+t).classList.add('active');btn.classList.add('active');
+  document.getElementById('tab-'+t).classList.add('active');
+  btn.classList.add('active');
+  try{localStorage.setItem('do_active_tab',t);}catch{}
 }
-function renderAll(){renderQL();renderTasks();initCC();renderAttGrid();renderAttSum();renderMM();renderRT();renderProducts();renderSessions();renderRecurringTemplates();renderUpcomingRecurring();}
+
+function restoreTab(){
+  try{
+    const t=localStorage.getItem('do_active_tab')||'launch';
+    const pane=document.getElementById('tab-'+t);
+    if(!pane)return;
+    document.querySelectorAll('.tabpane').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.tablink').forEach(b=>b.classList.remove('active'));
+    pane.classList.add('active');
+    // Find matching tab button by checking onclick attribute
+    document.querySelectorAll('.tablink').forEach(b=>{
+      if(b.getAttribute('onclick')&&b.getAttribute('onclick').includes("'"+t+"'"))
+        b.classList.add('active');
+    });
+  }catch{}
+}
+function safeCall(fn,name){try{fn();}catch(e){console.error('renderAll:'+name,e);}}
+function renderAll(){
+  safeCall(renderQL,'QL');
+  safeCall(renderTasks,'Tasks');
+  safeCall(initCC,'CC');
+  safeCall(renderAttGrid,'Att');
+  safeCall(renderAttSum,'AttSum');
+  safeCall(renderMM,'MM');
+  safeCall(renderRT,'RT');
+  safeCall(renderProducts,'Products');
+  safeCall(renderSessions,'Sessions');
+  safeCall(renderRecurringTemplates,'RecTempl');
+  safeCall(renderUpcomingRecurring,'RecUpcoming');
+}
 
 // ═══════════════════════════════════════════
 // QUICK LAUNCH
@@ -1914,8 +1948,12 @@ window.addEventListener('load', () => {
       document.getElementById('cc-adde-row').style.display=isM?'flex':'none';
       loadSets();
       const fresh=loadCache();
-      renderAll();
-      if(!fresh){sync('syncing','Loading fresh data...');}
+      if(fresh){
+        renderAll(); restoreTab();
+        sync('ok','Data loaded from cache ✓');
+      } else {
+        sync('syncing','Loading data from Google Sheets...');
+      }
       loadAll();
     }
   } catch(e) { /* no saved session, show login normally */ }
@@ -2217,7 +2255,8 @@ function saveCountEntry(productId){
   const entry={productId,productName:prod?.name||'',barcode:prod?.barcode||'',cat:prod?.cat||'',unit:prod?.unit||'pcs',price:prod?.price||0,systemQty:sys,physicalQty:phy,variance,varianceValue,notes,countedBy:role==='manager'?'Manager':(DB.staff[0]?.name||'Staff'),countedAt:new Date().toISOString()};
   const idx=currentSession.items.findIndex(i=>i.productId===productId);
   if(idx>-1)currentSession.items[idx]=entry;else currentSession.items.push(entry);
-  schedSync('Sessions');
+  // Force immediate sync for session items so other devices see it
+  flushSync();
   document.getElementById('bc-result').innerHTML=`<div style="background:var(--green-l);color:var(--green);padding:10px 14px;border-radius:var(--rs);font-size:13px;font-weight:600">✓ ${esc(prod?.name||'')} saved — Variance: ${variance>=0?'+':''}${variance.toFixed(2)} ${prod?.unit||''}</div>`;
   document.getElementById('bc-input').value='';
   document.getElementById('bc-input').focus();
@@ -2315,89 +2354,13 @@ function generateUpcomingRecurring(){
 }
 
 function renderRecurringTemplates(){
-  const templates=DB.recurringTemplates||[];
-  document.getElementById('rec-template-count').textContent=templates.length+' recurring tasks';
-  const tbody=document.getElementById('rectemplbody');
-  if(!templates.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">No recurring tasks set up yet.</td></tr>';return;}
-  const rl={daily:'Daily',weekly:'Weekly',monthly:'Monthly',bimonthly:'Every 2 Months',quarterly:'Quarterly',yearly:'Yearly'};
-  tbody.innerHTML=templates.map(t=>`<tr>
-    <td><strong>${esc(t.title)}</strong>${t.desc?`<br><small style="color:var(--muted)">${esc(t.desc)}</small>`:''}</td>
-    <td><span class="pill" style="background:var(--blue-l);color:var(--blue)">${rl[t.recurrence]||t.recurrence}</span></td>
-    <td><span class="tassigned">👤 ${esc(t.assignedTo||'—')}</span></td>
-    <td><span class="ptag ${t.priority[0]}">${t.priority}</span></td>
-    <td><span class="pill ${t.status==='active'?'pr':'pp'}">${t.status}</span></td>
-    <td style="white-space:nowrap">
-      <button class="tbtn te" onclick="openRecurringModal('${t.id}')">✏️</button>
-      <button class="tbtn" style="background:${t.status==='active'?'var(--amber-l)':'var(--green-l)'};color:${t.status==='active'?'var(--amber)':'var(--green)'}" onclick="toggleRecurring('${t.id}')">${t.status==='active'?'⏸ Pause':'▶ Resume'}</button>
-      <button class="tbtn td" onclick="delRecurring('${t.id}')">🗑</button>
-    </td>
-  </tr>`).join('');
+  // Recurring is now inline in Tasks — no separate tab
 }
 
 function renderUpcomingRecurring(){
-  const upcoming=generateUpcomingRecurring();
-  const tbody=document.getElementById('upcomingbody');
-  if(!upcoming.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--muted)">No upcoming recurring tasks in the next 90 days.</td></tr>';return;}
-  const rl={daily:'Daily',weekly:'Weekly',monthly:'Monthly',bimonthly:'Every 2 Months',quarterly:'Quarterly',yearly:'Yearly'};
-  const now=new Date();
-  tbody.innerHTML=upcoming.map(t=>{
-    const due=new Date(t.instanceDate);
-    const daysAway=Math.ceil((due-now)/(1000*60*60*24));
-    const urgency=daysAway<=3?'var(--red)':daysAway<=7?'var(--amber)':'var(--sage-dark)';
-    return `<tr>
-      <td><strong>${esc(t.title)}</strong></td>
-      <td style="color:${urgency};font-weight:600">${t.dueDisplay} <small style="font-weight:400;color:var(--muted)">(${daysAway===0?'Today':daysAway===1?'Tomorrow':'in '+daysAway+' days'})</small></td>
-      <td><span class="pill" style="background:var(--blue-l);color:var(--blue)">${rl[t.recurrence]||t.recurrence}</span></td>
-      <td><span class="tassigned">👤 ${esc(t.assignedTo||'—')}</span></td>
-      <td><button class="tbtn" style="background:var(--sage-pale);color:var(--sage-dark)" onclick="createFromTemplate('${t.id}','${t.instanceDate}')">+ Create Task</button></td>
-    </tr>`;
-  }).join('');
+  // Recurring is now inline in Tasks — no separate tab
 }
 
-function openRecurringModal(id){
-  document.getElementById('m-recurring').classList.add('open');
-  document.getElementById('rec-id').value=id||'';
-  const sel=document.getElementById('rec-assign');
-  sel.innerHTML='<option value="Manager">👑 Manager</option>'+DB.staff.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
-  if(id){
-    const t=(DB.recurringTemplates||[]).find(t=>t.id===id);if(!t)return;
-    document.getElementById('rec-title').value=t.title||'';
-    document.getElementById('rec-desc').value=t.desc||'';
-    document.getElementById('rec-recurrence').value=t.recurrence||'monthly';
-    document.getElementById('rec-assign').value=t.assignedTo||'Manager';
-    document.getElementById('rec-priority').value=t.priority||'medium';
-  } else {
-    ['rec-title','rec-desc'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
-    document.getElementById('rec-recurrence').value='monthly';
-    document.getElementById('rec-priority').value='medium';
-  }
-}
-
-async function saveRecurring(){
-  const title=document.getElementById('rec-title').value.trim();
-  if(!title){toast('Enter a title.');return;}
-  busy('recsavebtn',true);
-  if(!DB.recurringTemplates)DB.recurringTemplates=[];
-  const eid=document.getElementById('rec-id').value;
-  const t={id:eid||'rt'+Date.now(),title,desc:document.getElementById('rec-desc').value.trim(),recurrence:document.getElementById('rec-recurrence').value,assignedTo:document.getElementById('rec-assign').value,priority:document.getElementById('rec-priority').value,status:'active',due:new Date().toISOString(),lastDue:null,createdAt:new Date().toISOString()};
-  if(eid){const i=DB.recurringTemplates.findIndex(x=>x.id===eid);if(i>-1)DB.recurringTemplates[i]=t;}
-  else DB.recurringTemplates.push(t);
-  schedSync('Recurring');cm('m-recurring');
-  renderRecurringTemplates();renderUpcomingRecurring();
-  busy('recsavebtn',false);toast('Saved ✓','ok');
-}
-
-function toggleRecurring(id){
-  const t=(DB.recurringTemplates||[]).find(t=>t.id===id);
-  if(!t)return;t.status=t.status==='active'?'paused':'active';
-  schedSync('Recurring');renderRecurringTemplates();renderUpcomingRecurring();
-}
-
-function delRecurring(id){
-  if(!confirm('Delete this recurring task?'))return;
-  DB.recurringTemplates=(DB.recurringTemplates||[]).filter(t=>t.id!==id);
-  schedSync('Recurring');renderRecurringTemplates();renderUpcomingRecurring();toast('Deleted.');
-}
 
 function createFromTemplate(id,instanceDate){
   const t=(DB.recurringTemplates||[]).find(t=>t.id===id);if(!t)return;
