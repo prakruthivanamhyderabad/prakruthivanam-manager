@@ -302,12 +302,13 @@ table.atstbl tr:hover td{background:var(--cream)}
   <div class="sync-bar" id="syncbar"><span class="sdot" id="sdot"></span><span id="smsg">Connecting to Google Sheets...</span></div>
   <div class="tabnav">
     <button class="tablink active" onclick="swTab('launch',this)">🚀 Quick Launch</button>
-    <button class="tablink" onclick="swTab('tasks',this)">📋 Tasks</button>
+    <button class="tablink" onclick="swTab('tasks',this)">✅ To Do List</button>
     <button class="tablink" onclick="swTab('closing',this)">🧾 Counter Closing</button>
     <button class="tablink" onclick="swTab('attendance',this)">👥 Attendance</button>
-    <button class="tablink" onclick="swTab('mismatches',this)">⚖️ Mismatches</button>
-    <button class="tablink" onclick="swTab('returns',this)">↩️ Returns</button>
-    <button class="tablink" onclick="swTab('inventory',this)">📦 Inventory</button>
+    <button class="tablink" onclick="swTab('mismatches',this)">⚖️ Invoice Mismatches</button>
+    <button class="tablink" onclick="swTab('returns',this)">↩️ Stock Returns</button>
+    <button class="tablink" onclick="swTab('inventory',this)">🔍 Stock Audit</button>
+    <button class="tablink" id="payments-tab-btn" onclick="swTab('payments',this)">💰 Payments</button>
   </div>
   <div class="mc">
     <!-- SETTINGS -->
@@ -552,6 +553,47 @@ table.atstbl tr:hover td{background:var(--cream)}
       <div id="rt-group-list"></div>
     </div>
 
+    <!-- ═══ PAYMENTS TRACKER ═══ -->
+    <div class="tabpane" id="tab-payments">
+      <div class="statsbar">
+        <div class="sc r"><div class="scn" id="pay-unpaid">0</div><div class="scl">Unpaid</div></div>
+        <div class="sc a"><div class="scn" id="pay-partial">0</div><div class="scl">Partial</div></div>
+        <div class="sc g"><div class="scn" id="pay-paid">0</div><div class="scl">Paid</div></div>
+        <div class="sc b"><div class="scn" id="pay-total-amt" style="font-size:16px;margin-top:4px">₹0</div><div class="scl">Total Outstanding</div></div>
+      </div>
+      <div class="modhead">
+        <div class="modtitle">💰 Payment Tracker</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="exportbtn" onclick="exportPayCSV()">⬇ Export CSV</button>
+          <button class="addbtn" onclick="openPayModal()">＋ Add Invoice</button>
+        </div>
+      </div>
+      <!-- Filters -->
+      <div class="sbar" style="margin-bottom:14px">
+        <select class="fsel" id="pay-sup-filter" onchange="renderPayments()"><option value="">All Suppliers</option></select>
+        <select class="fsel" id="pay-status-filter" onchange="renderPayments()">
+          <option value="">All Statuses</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="partial">Partial</option>
+          <option value="paid">Paid</option>
+        </select>
+        <input class="si" type="date" id="pay-date-from" style="max-width:150px" onchange="renderPayments()" title="Bill date from">
+        <input class="si" type="date" id="pay-date-to" style="max-width:150px" onchange="renderPayments()" title="Bill date to">
+        <button class="exportbtn" onclick="clearPayFilters()">✕ Clear</button>
+      </div>
+      <div class="twrap">
+        <table class="rt" style="min-width:900px">
+          <thead><tr>
+            <th>Bill Date</th><th>Supplier</th><th>Brand</th><th>Bill No.</th>
+            <th>Bill Amount</th><th>GRN Status</th><th>To Pay</th>
+            <th>Status</th><th>Paid</th><th>Payment Date</th>
+            <th>Mode</th><th>Reference</th><th>Category</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="pay-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ═══ INVENTORY ═══ -->
     <div class="tabpane" id="tab-inventory">
       <!-- Main view -->
@@ -588,7 +630,7 @@ table.atstbl tr:hover td{background:var(--cream)}
         </div>
         <div class="twrap">
           <table class="rt">
-            <thead><tr><th>Product Name</th><th>Barcode</th><th>Category</th><th>Unit</th><th>Price</th><th>Last Updated</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Product Name</th><th>Barcode</th><th>Category</th><th>Brand</th><th>Price</th><th>Last Updated</th><th>Actions</th></tr></thead>
             <tbody id="prodbody"></tbody>
           </table>
         </div>
@@ -727,7 +769,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let DB = {
   tasks:[], cc:[], att:{}, staff:[{id:'s1',name:'Store Staff',role:'Store Assistant'}],
   mm:[], rt:[], ccf:null, ql:[],
-  products:[], sessions:[], recurringTemplates:[], invoices:[], returnGroups:[],
+  products:[], sessions:[], recurringTemplates:[], invoices:[], returnGroups:[], payments:[],
   pw:{manager:'admin123',staff:'staff123'}, sets:{}
 };
 let role='manager', filter='all', attDate=td(), ccExp=0, ccAct=0;
@@ -747,7 +789,7 @@ const DEFAULT_QL = [
 // CACHE — load instantly, refresh in background
 // ═══════════════════════════════════════════
 function saveCache(){
-  try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ts:Date.now(), data:{tasks:DB.tasks,cc:DB.cc,att:DB.att,staff:DB.staff,ccf:DB.ccf,ql:DB.ql,products:DB.products,sessions:DB.sessions,recurringTemplates:DB.recurringTemplates,invoices:DB.invoices,returnGroups:DB.returnGroups}})); }catch{}
+  try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ts:Date.now(), data:{tasks:DB.tasks,cc:DB.cc,att:DB.att,staff:DB.staff,ccf:DB.ccf,ql:DB.ql,products:DB.products,sessions:DB.sessions,recurringTemplates:DB.recurringTemplates,invoices:DB.invoices,returnGroups:DB.returnGroups,payments:DB.payments}})); }catch{}
 }
 function loadCache(){
   try{
@@ -760,6 +802,7 @@ function loadCache(){
     if(!DB.recurringTemplates)DB.recurringTemplates=[];
     if(!DB.invoices)DB.invoices=[];
     if(!DB.returnGroups)DB.returnGroups=[];
+    if(!DB.payments)DB.payments=[];
     if(!DB.ql||!DB.ql.length) DB.ql=DEFAULT_QL;
     if(!DB.staff||!DB.staff.length) DB.staff=[{id:'s1',name:'Store Staff',role:'Store Assistant'}];
     return age < CACHE_TTL; // true = fresh enough, false = stale but usable
@@ -827,6 +870,14 @@ function buildRows(s){
       ])
     ];
   }
+  if(s==='Payments'){
+    return data.map(r=>{
+      const toO=row=>{const o={};['id','date','billno','supplier','brand','billAmt','category','grn','status','paidAmt','balance','payDate','mode','ref','notes','updatedAt'].forEach((k,i)=>o[k]=r[i]||'');return o;};
+      const o=toO(r);
+      o.billAmt=parseFloat(o.billAmt)||0;o.paidAmt=parseFloat(o.paidAmt)||0;o.balance=parseFloat(o.balance)||0;
+      return o;
+    });
+  }
   if(s==='Invoices'){
     return[
       ['id','invoiceNo','supplier','date','createdAt','itemsJSON'],
@@ -844,6 +895,10 @@ function buildRows(s){
         rg.createdAt||'',JSON.stringify(rg.items||[])
       ])
     ];
+  }
+  if(s==='Payments'){
+    const h=['id','date','billno','supplier','brand','billAmt','category','grn','status','paidAmt','balance','payDate','mode','ref','notes','updatedAt'];
+    return[h,...(DB.payments||[]).map(p=>h.map(k=>String(p[k]||'')))];
   }
   if(s==='Recurring'){
     const h=['id','title','desc','recurrence','assignedTo','priority','status','due','lastDue'];
@@ -895,6 +950,14 @@ function parseRows(s,rows){
     });
   }
   if(s==='Recurring') return data.map(r=>({id:r[0],title:r[1],desc:r[2]||'',recurrence:r[3],assignedTo:r[4],priority:r[5]||'medium',status:r[6]||'active',due:r[7]||'',lastDue:r[8]||null}));
+  if(s==='Payments'){
+    return data.map(r=>{
+      const toO=row=>{const o={};['id','date','billno','supplier','brand','billAmt','category','grn','status','paidAmt','balance','payDate','mode','ref','notes','updatedAt'].forEach((k,i)=>o[k]=r[i]||'');return o;};
+      const o=toO(r);
+      o.billAmt=parseFloat(o.billAmt)||0;o.paidAmt=parseFloat(o.paidAmt)||0;o.balance=parseFloat(o.balance)||0;
+      return o;
+    });
+  }
   if(s==='Invoices'){
     return data.map(r=>{
       let items=[];
@@ -914,7 +977,7 @@ function parseRows(s,rows){
 
 async function loadAll(){
   sync('syncing','Loading data from Google Sheets...');
-  const sheets=['Tasks','CC','Att','Staff','CCF','QL','Products','Sessions','Recurring','Invoices','ReturnGroups'];
+  const sheets=['Tasks','CC','Att','Staff','CCF','QL','Products','Sessions','Recurring','Invoices','ReturnGroups','Payments'];
   const results=[];
   for(const s of sheets){
     const r=await gsRead(s);
@@ -940,6 +1003,7 @@ async function loadAll(){
         else if(s==='Recurring')DB.recurringTemplates=p;
         else if(s==='Invoices'&&p)DB.invoices=p;
         else if(s==='ReturnGroups'&&p)DB.returnGroups=p;
+        else if(s==='Payments'&&p)DB.payments=p;
         loaded++;
       }
     }
@@ -977,6 +1041,7 @@ function doLogin(){
     const isM=role==='manager';
     document.getElementById('setbtn').style.display=isM?'inline-flex':'none';
     document.getElementById('addstaffbtn').style.display=isM?'flex':'none';
+    const payTab=document.getElementById('payments-tab-btn');if(payTab)payTab.style.display=isM?'flex':'none';
     document.getElementById('addmmbtn').style.display=isM?'flex':'none';
     document.getElementById('addrtbtn').style.display=isM?'flex':'none';
     document.getElementById('cc-addp-row').style.display=isM?'flex':'none';
@@ -1056,6 +1121,9 @@ function renderAll(){
   safeCall(renderSessions,'Sessions');
   safeCall(renderRecurringTemplates,'RecTempl');
   safeCall(renderUpcomingRecurring,'RecUpcoming');
+  safeCall(renderPayments,'Payments');
+  safeCall(populateSupplierList,'Suppliers');
+  safeCall(populateAllItemLists,'Items');
 }
 
 // ═══════════════════════════════════════════
@@ -1508,7 +1576,7 @@ function renderCCHist(){
     const v=c.variance||0;const vc=Math.abs(v)<0.01?'pbl':v<0?'pso':'pes';const vl=Math.abs(v)<0.01?'Balanced':v<0?`-${fmt(Math.abs(v))}`:`+${fmt(v)}`;
     const sc=c.status==='approved'?'pap':'psb';const sl=c.status==='approved'?'✓ Approved':'⏳ Pending';
     return `<tr>
-      <td><button onclick="loadCCFromHistory('${c.date}')" style="background:none;border:none;cursor:pointer;color:var(--blue);font-weight:700;font-size:13px;text-decoration:underline;padding:0">${c.date}</button></td>
+      <td><button onclick="loadCCFromHistory('${c.date}')" style="background:none;border:none;cursor:pointer;color:var(--blue);font-weight:700;font-size:13px;text-decoration:underline;padding:0">${c.date?new Date(c.date.slice(0,10)+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'-'}</button></td>
       <td>${fmt(c.sale)}</td><td>${fmt(c.nc||0)}</td><td>${fmt(c.cash||0)}</td><td>${fmt(c.open||0)}</td><td>${fmt(c.expected||0)}</td><td>${fmt(c.actual||0)}</td>
       <td><span class="pill ${vc}">${vl}</span></td>
       <td><span class="pill ${sc}">${sl}</span></td>
@@ -1991,6 +2059,7 @@ window.addEventListener('load', () => {
       const isM=role==='manager';
       document.getElementById('setbtn').style.display=isM?'inline-flex':'none';
       document.getElementById('addstaffbtn').style.display=isM?'flex':'none';
+    const payTab=document.getElementById('payments-tab-btn');if(payTab)payTab.style.display=isM?'flex':'none';
       document.getElementById('addmmbtn').style.display=isM?'flex':'none';
       document.getElementById('addrtbtn').style.display=isM?'flex':'none';
       document.getElementById('cc-addp-row').style.display=isM?'flex':'none';
@@ -2008,7 +2077,7 @@ window.addEventListener('load', () => {
   } catch(e) { /* no saved session, show login normally */ }
 });
 
-window.addEventListener('click',e=>{['m-ql','m-task','m-mm','m-rt','m-staff','m-exp','m-product','m-newsess','m-invoice','m-retgroup'].forEach(id=>{if(e.target===document.getElementById(id))cm(id)})});
+window.addEventListener('click',e=>{['m-ql','m-task','m-mm','m-rt','m-staff','m-exp','m-product','m-newsess','m-invoice','m-retgroup','m-pay'].forEach(id=>{if(e.target===document.getElementById(id))cm(id)})});
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&document.getElementById('m-exp').classList.contains('open')){const d=document.getElementById('exp-new-desc').value.trim();const a=document.getElementById('exp-new-amt').value;if(d&&a)addExpItem();}
   if(e.key==='Enter'&&document.getElementById('m-invoice').classList.contains('open')&&document.activeElement?.id!=='inv-no'&&document.activeElement?.id!=='inv-sup'){const it=document.getElementById('inv-new-item').value.trim();if(it)addInvItem();}
@@ -2427,6 +2496,145 @@ function downloadSampleCSV(){
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='product_master_sample.csv';a.click();
 }
 
+// ═══════════════════════════════════════════
+// AUTOCOMPLETE HELPERS
+// ═══════════════════════════════════════════
+function populateSupplierList(){
+  const known=['Adavi Sampada','Arogya Rahasya','Cast Iron','Dathu Naturals','IM Corporation','GCC','GoDesi','Herbal Strategi','Prakruthivanam','Pure & Sure','Surabhi','Timbaktu'];
+  const fromProducts=[...new Set((DB.products||[]).map(p=>p.unit).filter(Boolean))];
+  const all=[...new Set([...known,...fromProducts])].sort();
+  const opts=all.map(s=>`<option value="${esc(s)}">`).join('');
+  ['supplier-list','pay-supplier-list'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts;});
+  const brandList=document.getElementById('brand-list');
+  if(brandList)brandList.innerHTML=opts;
+  const payFilter=document.getElementById('pay-sup-filter');
+  if(payFilter){const cur=payFilter.value;payFilter.innerHTML='<option value="">All Suppliers</option>'+all.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');payFilter.value=cur;}
+}
+
+function filterItemsBySupplier(itemInputId,supplier){
+  const items=(DB.products||[]).filter(p=>!supplier||p.unit===supplier||p.name.toLowerCase().includes(supplier.toLowerCase())).map(p=>p.name);
+  const listId=itemInputId==='rg-new-item'?'rg-item-list':'inv-item-list';
+  const dl=document.getElementById(listId);
+  if(dl)dl.innerHTML=[...new Set(items)].map(n=>`<option value="${esc(n)}">`).join('');
+}
+
+function populateAllItemLists(){
+  const items=[...new Set((DB.products||[]).map(p=>p.name))];
+  const opts=items.map(n=>`<option value="${esc(n)}">`).join('');
+  ['rg-item-list','inv-item-list'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts;});
+}
+
+// ═══════════════════════════════════════════
+// PAYMENTS TRACKER
+// ═══════════════════════════════════════════
+function openPayModal(id){
+  if(role!=='manager'){toast('Only manager can access payments.');return;}
+  document.getElementById('m-pay').classList.add('open');
+  document.getElementById('pay-id').value=id||'';
+  populateSupplierList();
+  if(id){
+    const p=(DB.payments||[]).find(x=>x.id===id);if(!p)return;
+    document.getElementById('pay-date').value=p.date||'';
+    document.getElementById('pay-billno').value=p.billno||'';
+    document.getElementById('pay-supplier').value=p.supplier||'';
+    document.getElementById('pay-brand').value=p.brand||'';
+    document.getElementById('pay-bill-amt').value=p.billAmt||'';
+    document.getElementById('pay-category').value=p.category||'';
+    document.getElementById('pay-grn').value=p.grn||'Pending';
+    document.getElementById('pay-status').value=p.status||'unpaid';
+    document.getElementById('pay-paid-amt').value=p.paidAmt||'';
+    document.getElementById('pay-balance').value=p.balance||'';
+    document.getElementById('pay-pay-date').value=p.payDate||'';
+    document.getElementById('pay-mode').value=p.mode||'';
+    document.getElementById('pay-ref').value=p.ref||'';
+    document.getElementById('pay-notes').value=p.notes||'';
+  } else {
+    document.getElementById('pay-date').value=td();
+    ['pay-billno','pay-supplier','pay-brand','pay-bill-amt','pay-category','pay-paid-amt','pay-balance','pay-pay-date','pay-ref','pay-notes'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+    document.getElementById('pay-grn').value='Pending';
+    document.getElementById('pay-status').value='unpaid';
+    document.getElementById('pay-mode').value='';
+  }
+}
+
+function calcPayBalance(){
+  const bill=parseFloat(document.getElementById('pay-bill-amt')?.value)||0;
+  const paid=parseFloat(document.getElementById('pay-paid-amt')?.value)||0;
+  const balance=Math.max(0,bill-paid);
+  const balEl=document.getElementById('pay-balance');
+  if(balEl)balEl.value=balance.toFixed(2);
+  const statEl=document.getElementById('pay-status');
+  if(statEl&&bill>0){if(paid<=0)statEl.value='unpaid';else if(paid>=bill)statEl.value='paid';else statEl.value='partial';}
+}
+
+async function savePayment(){
+  const billno=document.getElementById('pay-billno').value.trim();
+  const supplier=document.getElementById('pay-supplier').value.trim();
+  const billAmt=parseFloat(document.getElementById('pay-bill-amt').value)||0;
+  if(!billno||!supplier||!billAmt){toast('Fill bill number, supplier and amount.');return;}
+  busy('paysavebtn',true);
+  if(!DB.payments)DB.payments=[];
+  const eid=document.getElementById('pay-id').value;
+  const paidAmt=parseFloat(document.getElementById('pay-paid-amt').value)||0;
+  const p={id:eid||'pay'+Date.now(),date:document.getElementById('pay-date').value,billno,supplier,brand:document.getElementById('pay-brand').value.trim(),billAmt,category:document.getElementById('pay-category').value.trim(),grn:document.getElementById('pay-grn').value,status:document.getElementById('pay-status').value,paidAmt,balance:Math.max(0,billAmt-paidAmt),payDate:document.getElementById('pay-pay-date').value,mode:document.getElementById('pay-mode').value,ref:document.getElementById('pay-ref').value.trim(),notes:document.getElementById('pay-notes').value.trim(),updatedAt:new Date().toISOString()};
+  if(eid){const i=DB.payments.findIndex(x=>x.id===eid);if(i>-1)DB.payments[i]=p;}else DB.payments.unshift(p);
+  schedSync('Payments');cm('m-pay');renderPayments();
+  busy('paysavebtn',false);toast('Payment record saved to Google Sheets ✓','ok');
+}
+
+function delPayment(id){
+  if(!confirm('Delete this payment record?'))return;
+  DB.payments=(DB.payments||[]).filter(x=>x.id!==id);
+  schedSync('Payments');renderPayments();toast('Deleted.');
+}
+
+function clearPayFilters(){
+  ['pay-date-from','pay-date-to'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+  const sf=document.getElementById('pay-sup-filter');if(sf)sf.value='';
+  const stf=document.getElementById('pay-status-filter');if(stf)stf.value='';
+  renderPayments();
+}
+
+function renderPayments(){
+  const payTab=document.getElementById('payments-tab-btn');
+  if(role!=='manager'){if(payTab)payTab.style.display='none';return;}
+  if(payTab)payTab.style.display='flex';
+  if(!DB.payments)DB.payments=[];
+  let pays=DB.payments;
+  const supF=document.getElementById('pay-sup-filter')?.value||'';
+  const stF=document.getElementById('pay-status-filter')?.value||'';
+  const df=document.getElementById('pay-date-from')?.value||'';
+  const dt=document.getElementById('pay-date-to')?.value||'';
+  if(supF)pays=pays.filter(p=>p.supplier===supF);
+  if(stF)pays=pays.filter(p=>p.status===stF);
+  if(df)pays=pays.filter(p=>p.date>=df);
+  if(dt)pays=pays.filter(p=>p.date<=dt);
+  pays=[...pays].sort((a,b)=>b.date.localeCompare(a.date));
+  const all=DB.payments;
+  const pdEl=document.getElementById('pay-unpaid');if(pdEl)pdEl.textContent=all.filter(p=>p.status==='unpaid').length;
+  const ptEl=document.getElementById('pay-partial');if(ptEl)ptEl.textContent=all.filter(p=>p.status==='partial').length;
+  const pkEl=document.getElementById('pay-paid');if(pkEl)pkEl.textContent=all.filter(p=>p.status==='paid').length;
+  const outstanding=all.filter(p=>p.status!=='paid').reduce((s,p)=>s+(p.balance||0),0);
+  const amtEl=document.getElementById('pay-total-amt');if(amtEl)amtEl.textContent=fmt(outstanding);
+  populateSupplierList();
+  const tbody=document.getElementById('pay-tbody');if(!tbody)return;
+  if(!pays.length){tbody.innerHTML='<tr><td colspan="14" style="text-align:center;padding:32px;color:var(--muted)">No payment records yet. Click "+ Add Invoice" to start tracking.</td></tr>';return;}
+  const spill={unpaid:'pso',partial:'pt',paid:'pap'};
+  const grnPill={Pending:'pp',Completed:'pap',Partial:'pt'};
+  tbody.innerHTML=pays.map(p=>{
+    const dateStr=p.date?new Date(p.date.slice(0,10)+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'-';
+    const payDateStr=p.payDate?new Date(p.payDate.slice(0,10)+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'}):'-';
+    return `<tr><td>${dateStr}</td><td><strong>${esc(p.supplier)}</strong></td><td>${esc(p.brand||'—')}</td><td><code style="font-size:11px;background:var(--cream-dark);padding:1px 5px;border-radius:3px">${esc(p.billno)}</code></td><td style="font-weight:600">${fmt(p.billAmt)}</td><td><span class="pill ${grnPill[p.grn]||'pp'}">${esc(p.grn||'Pending')}</span></td><td style="color:${(p.balance||0)>0?'var(--red)':'var(--green)'};font-weight:700">${fmt(p.balance||0)}</td><td><span class="pill ${spill[p.status]||'pp'}">${p.status}</span></td><td>${p.paidAmt?fmt(p.paidAmt):'-'}</td><td>${payDateStr}</td><td style="font-size:12px">${esc(p.mode||'—')}</td><td style="font-size:11.5px;color:var(--muted)">${esc(p.ref||'—')}</td><td style="font-size:12px">${esc(p.category||'—')}</td><td><button class="tbtn te" onclick="openPayModal('${p.id}')">✏️</button><button class="tbtn td" onclick="delPayment('${p.id}')">🗑</button></td></tr>`;
+  }).join('');
+}
+
+function exportPayCSV(){
+  const h=['Bill Date','Supplier','Brand','Bill No','Bill Amount','GRN Status','Amount to Pay','Payment Status','Amount Paid','Payment Date','Payment Mode','Reference','Category','Notes'];
+  const rows=(DB.payments||[]).map(p=>[p.date,p.supplier,p.brand||'',p.billno,p.billAmt,p.grn,p.balance||0,p.status,p.paidAmt||0,p.payDate||'',p.mode||'',p.ref||'',p.category||'',p.notes||'']);
+  const csv=[h,...rows].map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='payments.csv';a.click();toast('Exported ✓','ok');
+}
+
 </script>
 
 <!-- Product Modal -->
@@ -2438,7 +2646,7 @@ function downloadSampleCSV(){
   </div>
   <div class="frow">
     <div class="fg"><label class="fl">Category</label><input class="fi" type="text" id="prod-cat" list="cat-list" placeholder="e.g. Oils, Millets, Spices..."><datalist id="cat-list"></datalist></div>
-    <div class="fg"><label class="fl">Unit</label><select class="fsel2" id="prod-unit"><option value="pcs">Pieces (pcs)</option><option value="kg">Kilograms (kg)</option><option value="g">Grams (g)</option><option value="L">Litres (L)</option><option value="ml">Millilitres (ml)</option><option value="box">Box</option><option value="pack">Pack</option></select></div>
+    <div class="fg"><label class="fl">Brand</label><input class="fi" type="text" id="prod-unit" list="brand-list" placeholder="e.g. Timbaktu, Pure&Sure..."><datalist id="brand-list"></datalist></div>
   </div>
   <div class="fg"><label class="fl">Selling Price (₹)</label><input class="fi" type="number" id="prod-price" placeholder="0.00" min="0" step="0.01"></div>
   <div class="mfooter"><button class="cancelbtn" onclick="cm('m-product')">Cancel</button><button class="savebtn" id="prodsavebtn" onclick="saveProduct()">Save Product</button></div>
@@ -2461,13 +2669,13 @@ function downloadSampleCSV(){
   <h2>⚖️ Invoice Mismatch</h2>
   <div class="frow">
     <div class="fg"><label class="fl">Invoice No. *</label><input class="fi" type="text" id="inv-no" placeholder="e.g. INV-2025-0456 or 27-Apr-2026"></div>
-    <div class="fg"><label class="fl">Supplier *</label><input class="fi" type="text" id="inv-sup" placeholder="e.g. Timbaktu"></div>
+    <div class="fg"><label class="fl">Supplier *</label><input class="fi" type="text" id="inv-sup" placeholder="e.g. Timbaktu" list="supplier-list" oninput="filterItemsBySupplier('inv-new-item',this.value)"></div>
   </div>
   <div class="fg"><label class="fl">Invoice Date *</label><input class="fi" type="date" id="inv-date"></div>
   <div style="margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Items with Mismatch</div>
   <div id="inv-items-list" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto;margin-bottom:10px"></div>
   <div style="background:var(--cream);border-radius:var(--rs);padding:12px;display:grid;grid-template-columns:1fr 100px 100px 110px auto;gap:8px;align-items:end">
-    <div><label class="fl">Item Name</label><input class="fi" type="text" id="inv-new-item" placeholder="e.g. Groundnut Oil 1L"></div>
+    <div><label class="fl">Item Name</label><input class="fi" type="text" id="inv-new-item" placeholder="e.g. Groundnut Oil 1L" list="inv-item-list"><datalist id="inv-item-list"></datalist></div>
     <div><label class="fl">Type</label><select class="fsel2" id="inv-new-type"><option value="short">Short</option><option value="excess">Excess</option><option value="wrong">Wrong</option></select></div>
     <div><label class="fl">Invoiced</label><input class="fi" type="number" id="inv-new-inv" min="0" placeholder="0"></div>
     <div><label class="fl">Received</label><input class="fi" type="number" id="inv-new-rec" min="0" placeholder="0"></div>
@@ -2482,13 +2690,13 @@ function downloadSampleCSV(){
   <h2>↩️ Stock Return</h2>
   <div class="frow">
     <div class="fg"><label class="fl">Return Date *</label><input class="fi" type="date" id="rg-date"></div>
-    <div class="fg"><label class="fl">Supplier *</label><input class="fi" type="text" id="rg-sup" placeholder="e.g. Timbaktu"></div>
+    <div class="fg"><label class="fl">Supplier *</label><input class="fi" type="text" id="rg-sup" placeholder="e.g. Timbaktu" list="supplier-list" oninput="filterItemsBySupplier('rg-new-item',this.value)"><datalist id="supplier-list"></datalist></div>
   </div>
   <div class="fg"><label class="fl">Notes / Remarks</label><input class="fi" type="text" id="rg-notes" placeholder="e.g. Monthly returns to Timbaktu"></div>
   <div style="margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Items Returned</div>
   <div id="rg-items-list" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;margin-bottom:10px"></div>
   <div style="background:var(--cream);border-radius:var(--rs);padding:12px;display:grid;grid-template-columns:1fr 100px 90px 110px auto;gap:8px;align-items:end">
-    <div><label class="fl">Item Name</label><input class="fi" type="text" id="rg-new-item" placeholder="e.g. Foxtail Millet 500g"></div>
+    <div><label class="fl">Item Name</label><input class="fi" type="text" id="rg-new-item" placeholder="e.g. Foxtail Millet 500g" list="rg-item-list"><datalist id="rg-item-list"></datalist></div>
     <div><label class="fl">Reason</label><select class="fsel2" id="rg-new-rsn"><option value="damaged">Damaged</option><option value="expired">Expired</option><option value="wrong">Wrong</option><option value="overstock">Overstock</option></select></div>
     <div><label class="fl">Qty</label><input class="fi" type="number" id="rg-new-qty" min="1" placeholder="0"></div>
     <div><label class="fl">Resolution</label><select class="fsel2" id="rg-new-res"><option value="credit-note">Credit Note</option><option value="replacement">Replacement</option><option value="refund">Refund</option><option value="tbd">TBD</option></select></div>
@@ -2496,6 +2704,39 @@ function downloadSampleCSV(){
   </div>
   <input type="hidden" id="rg-edit-id">
   <div class="mfooter"><button class="cancelbtn" onclick="cm('m-retgroup')">Cancel</button><button class="savebtn" id="rgsavebtn" onclick="saveReturnGroup()">Save Return</button></div>
+</div></div>
+
+<!-- Payment Modal -->
+<div class="moverlay" id="m-pay"><div class="modal" style="width:640px;max-height:90vh">
+  <h2>💰 Supplier Invoice / Payment</h2>
+  <input type="hidden" id="pay-id">
+  <div class="frow">
+    <div class="fg"><label class="fl">Bill Date *</label><input class="fi" type="date" id="pay-date"></div>
+    <div class="fg"><label class="fl">Bill No. *</label><input class="fi" type="text" id="pay-billno" placeholder="e.g. INV-2025-0456"></div>
+  </div>
+  <div class="frow">
+    <div class="fg"><label class="fl">Supplier *</label><input class="fi" type="text" id="pay-supplier" list="pay-supplier-list" placeholder="e.g. Timbaktu"><datalist id="pay-supplier-list"></datalist></div>
+    <div class="fg"><label class="fl">Brand</label><input class="fi" type="text" id="pay-brand" placeholder="e.g. Timbaktu"></div>
+  </div>
+  <div class="frow">
+    <div class="fg"><label class="fl">Bill Amount (₹) *</label><input class="fi" type="number" id="pay-bill-amt" min="0" step="0.01" placeholder="0.00" oninput="calcPayBalance()"></div>
+    <div class="fg"><label class="fl">Category</label><input class="fi" type="text" id="pay-category" placeholder="e.g. Grocery, Oils, Millets"></div>
+  </div>
+  <div class="frow">
+    <div class="fg"><label class="fl">GRN Status</label><select class="fsel2" id="pay-grn"><option value="Pending">Pending</option><option value="Completed">Completed</option><option value="Partial">Partial</option></select></div>
+    <div class="fg"><label class="fl">Payment Status</label><select class="fsel2" id="pay-status" onchange="calcPayBalance()"><option value="unpaid">Unpaid</option><option value="partial">Partial</option><option value="paid">Paid</option></select></div>
+  </div>
+  <div class="frow">
+    <div class="fg"><label class="fl">Amount Paid (₹)</label><input class="fi" type="number" id="pay-paid-amt" min="0" step="0.01" placeholder="0.00" oninput="calcPayBalance()"></div>
+    <div class="fg"><label class="fl">Amount to Pay (₹)</label><input class="fi" type="number" id="pay-balance" min="0" step="0.01" placeholder="Auto-calculated" style="background:var(--sage-pale);font-weight:700" readonly></div>
+  </div>
+  <div class="frow">
+    <div class="fg"><label class="fl">Payment Date</label><input class="fi" type="date" id="pay-pay-date"></div>
+    <div class="fg"><label class="fl">Payment Mode</label><select class="fsel2" id="pay-mode"><option value="">—</option><option value="Transfer Equitas">Transfer Equitas</option><option value="Transfer HDFC">Transfer HDFC</option><option value="UPI">UPI</option><option value="Cash">Cash</option><option value="Cheque">Cheque</option><option value="NEFT">NEFT</option></select></div>
+  </div>
+  <div class="fg"><label class="fl">Payment Reference</label><input class="fi" type="text" id="pay-ref" placeholder="e.g. UTR number, cheque number..."></div>
+  <div class="fg"><label class="fl">Notes</label><input class="fi" type="text" id="pay-notes" placeholder="Any additional notes..."></div>
+  <div class="mfooter"><button class="cancelbtn" onclick="cm('m-pay')">Cancel</button><button class="savebtn" id="paysavebtn" onclick="savePayment()">Save</button></div>
 </div></div>
 </body>
 </html>
