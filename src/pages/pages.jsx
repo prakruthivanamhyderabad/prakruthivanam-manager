@@ -935,8 +935,9 @@ export function Settings({ onClose, toast }) {
       { key: 'wa_phone_id', value: form.wa_phone_id },
       { key: 'wa_recipient', value: form.wa_recipient }
     ]
-    await supabase.from('settings').upsert(rows, { onConflict: 'key' })
+    const { error } = await supabase.from('settings').upsert(rows, { onConflict: 'key' })
     setSaving(false)
+    if (error) { toast('Save failed: ' + error.message, 'error'); return }
     toast('Settings saved ✓', 'success')
     onClose()
   }
