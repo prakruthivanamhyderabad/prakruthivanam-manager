@@ -32,6 +32,16 @@ function parseExcelDate(v) {
 }
 function num(v) { return parseFloat(String(v ?? '').replace(/,/g, '')) || 0 }
 
+// Vyapar exports prepend a "Generated on ..." line (and often a blank row) before
+// the real header row, so the header can't be assumed to be row 0 — search for it.
+function findHeaderRow(rows, mustInclude) {
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const hdr = (rows[i] || []).map(h => String(h || '').toLowerCase())
+    if (mustInclude.every(s => hdr.some(h => h.includes(s)))) return i
+  }
+  return -1
+}
+
 export default function CustomerInsights({ user, toast, setSyncStatus }) {
   const [transactions, setTransactions] = useState([])
   const [partyMap, setPartyMap] = useState({})
@@ -67,15 +77,18 @@ export default function CustomerInsights({ user, toast, setSyncStatus }) {
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array', cellDates: true })
 
-      // Find the item-details sheet by header; fall back to the 2nd sheet.
-      let itemSheetName = wb.SheetNames.find(name => {
+      // Find the item-details sheet (and its header row — Vyapar prepends a
+      // "Generated on ..." line before the real headers) by scanning all sheets.
+      let itemSheetName = null, itemHeaderRow = -1
+      for (const name of wb.SheetNames) {
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: null })
-        const hdr = (rows[0] || []).map(h => String(h || '').toLowerCase())
-        return hdr.some(h => h.includes('item name'))
-      }) || wb.SheetNames[1] || wb.SheetNames[0]
+        const hr = findHeaderRow(rows, ['item name'])
+        if (hr >= 0) { itemSheetName = name; itemHeaderRow = hr; break }
+      }
+      if (!itemSheetName) { itemSheetName = wb.SheetNames[1] || wb.SheetNames[0]; itemHeaderRow = 0 }
 
       const itemData = XLSX.utils.sheet_to_json(wb.Sheets[itemSheetName], { header: 1, defval: null })
-      const hdr = (itemData[0] || []).map(h => String(h || '').toLowerCase())
+      const hdr = (itemData[itemHeaderRow] || []).map(h => String(h || '').toLowerCase())
 
       const dateI = hdr.findIndex(h => h === 'date' || h.includes('date'))
       const invoiceI = hdr.findIndex(h => h.includes('invoice') || h.includes('txn no'))
@@ -97,7 +110,7 @@ export default function CustomerInsights({ user, toast, setSyncStatus }) {
 
       const rows = []
       let minDate = null, maxDate = null
-      for (let i = 1; i < itemData.length; i++) {
+      for (let i = itemHeaderRow + 1; i < itemData.length; i++) {
         const row = itemData[i]
         if (!row || row.every(v => !v)) continue
         const name = String(row[nameI] || '').trim()
@@ -132,11 +145,12 @@ export default function CustomerInsights({ user, toast, setSyncStatus }) {
       const partyPhones = {}
       wb.SheetNames.forEach(name => {
         const sheetRows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: null })
-        const h2 = (sheetRows[0] || []).map(h => String(h || '').toLowerCase())
+        const hr2 = findHeaderRow(sheetRows, ['party name', 'phone'])
+        if (hr2 < 0) return
+        const h2 = (sheetRows[hr2] || []).map(h => String(h || '').toLowerCase())
         const pNameI = h2.findIndex(h => h.includes('party name'))
         const pPhoneI = h2.findIndex(h => h.includes('phone'))
-        if (pNameI < 0 || pPhoneI < 0) return
-        for (let i = 1; i < sheetRows.length; i++) {
+        for (let i = hr2 + 1; i < sheetRows.length; i++) {
           const r = sheetRows[i]
           const pn = String(r[pNameI] || '').trim()
           const ph = String(r[pPhoneI] || '').trim()
@@ -181,14 +195,19 @@ export default function CustomerInsights({ user, toast, setSyncStatus }) {
       const wb = XLSX.read(buffer, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null })
-      const hdr = (data[0] || []).map(h => String(h || '').toLowerCase())
+      let headerRow = findHeaderRow(data, ['party name'])
+      if (headerRow < 0) headerRow = findHeaderRow(data, ['name'])
+      if (headerRow < 0) headerRow = 0
+      const hdr = (data[headerRow] || []).map(h => String(h || '').toLowerCase())
       const partyNameI = hdr.findIndex(h => h.includes('party name'))
       const nameI = partyNameI >= 0 ? partyNameI : hdr.findIndex(h => h.includes('name'))
       const phoneI = hdr.findIndex(h => h.includes('phone'))
       const gstinI = hdr.findIndex(h => h.includes('gstin'))
 
+      if (nameI < 0) { toast('Could not find a Party/Name column — is this the right file?', 'error'); setUploadingWhat(''); return }
+
       const rows = []
-      for (let i = 1; i < data.length; i++) {
+      for (let i = headerRow + 1; i < data.length; i++) {
         const row = data[i]
         const name = String(row[nameI] || '').trim()
         if (!name) continue
