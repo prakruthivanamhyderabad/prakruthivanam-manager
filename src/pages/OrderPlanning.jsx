@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
-import { Modal, FormGroup, FormRow, StatCard, Loading } from '../components/ui'
+import { supabase, fetchAllRows } from '../lib/supabase'
+import { Modal, FormGroup, FormRow, StatCard, Loading, UploadCard, BarCell, TrendChart, RankTable } from '../components/ui'
 import { fmt, fmtDate, today, thisMonth } from '../lib/utils'
 import * as XLSX from 'xlsx'
 
@@ -58,21 +58,6 @@ export default function OrderPlanning({ user, toast, setSyncStatus }) {
   const [salesSearch, setSalesSearch] = useState('')
 
   useEffect(() => { fetchAll() }, [])
-
-  // Supabase/PostgREST caps a single request at ~1000 rows by default —
-  // page through with .range() so multi-month uploads don't get silently truncated.
-  async function fetchAllRows(table, select, orderCol) {
-    const PAGE = 1000
-    let all = [], from = 0
-    while (true) {
-      const { data, error } = await supabase.from(table).select(select).order(orderCol).range(from, from + PAGE - 1)
-      if (error || !data) break
-      all = all.concat(data)
-      if (data.length < PAGE) break
-      from += PAGE
-    }
-    return all
-  }
 
   async function fetchAll() {
     const [
@@ -840,9 +825,11 @@ export default function OrderPlanning({ user, toast, setSyncStatus }) {
                 </div>
               </div>
 
-              {salesView === 'monthly' && <MonthlyTrendChart data={monthlyTrend} metric={salesMetric} />}
+              {salesView === 'monthly' && <TrendChart data={monthlyTrend} xKey="month" metric={salesMetric}
+                formatValue={d => salesMetric === 'revenue' ? fmt(d.revenue) : d.qty.toLocaleString()}
+                subLabel={d => `${d.itemCount} items`} />}
               {salesView === 'items' && <ItemsTable items={filteredItems} metric={salesMetric} search={salesSearch} setSearch={setSalesSearch} />}
-              {salesView === 'brands' && <RankTable rows={sortedBrands} nameKey="brand" metric={salesMetric} icon="🏭" />}
+              {salesView === 'brands' && <RankTable rows={sortedBrands} nameKey="brand" metric={salesMetric} icon="🏭" extraCol={{ label: 'Items', value: r => r.itemCount }} />}
               {salesView === 'categories' && <RankTable rows={sortedCategories} nameKey="category" metric={salesMetric} icon="📂" />}
             </>
           )}
@@ -1027,67 +1014,7 @@ export default function OrderPlanning({ user, toast, setSyncStatus }) {
   )
 }
 
-function UploadCard({ title, subtitle, desc, loading, accept, onChange, badge }) {
-  return (
-    <div style={{ background: 'var(--cream)', borderRadius: 'var(--r)', padding: '14px 16px', border: loading ? '2px solid var(--gold)' : '2px solid transparent', transition: 'border .3s' }}>
-      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--brown-dark)', marginBottom: 2 }}>{title}</div>
-      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{subtitle}</div>
-      <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 10 }}>{desc}</div>
-      {badge && <div style={{ fontSize: 11, background: 'var(--green-l)', color: 'var(--green)', padding: '3px 8px', borderRadius: 6, marginBottom: 8, fontWeight: 600, wordBreak: 'break-word' }}>✓ {badge}</div>}
-      {loading ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--amber)', fontSize: 12, fontWeight: 600 }}>
-          <div style={{ width: 16, height: 16, border: '2px solid var(--amber)', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-          Uploading... please wait
-        </div>
-      ) : (
-        <label className="btn btn-primary btn-sm" style={{ cursor: 'pointer', display: 'inline-flex' }}>
-          ⬆ Upload
-          <input type="file" accept={accept} onChange={onChange} style={{ display: 'none' }} />
-        </label>
-      )}
-    </div>
-  )
-}
-
 // ── Sales Analytics components ──────────────────────────
-function BarCell({ value, max, color, display }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ flex: 1, height: 6, background: 'var(--cream)', borderRadius: 3, overflow: 'hidden', minWidth: 50 }}>
-        <div style={{ width: `${Math.min(100, (value / max) * 100)}%`, height: '100%', background: color, borderRadius: 3 }} />
-      </div>
-      <span style={{ fontSize: 12.5, fontWeight: 600, minWidth: 70, textAlign: 'right', whiteSpace: 'nowrap' }}>{display}</span>
-    </div>
-  )
-}
-
-function MonthlyTrendChart({ data, metric }) {
-  const max = Math.max(...data.map(d => d[metric] || 0), 1)
-  return (
-    <div className="card" style={{ padding: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 230, overflowX: 'auto', paddingTop: 8 }}>
-        {data.map(d => {
-          const h = Math.max(4, (d[metric] / max) * 180)
-          return (
-            <div key={d.month} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 64, flex: '1 0 64px' }}>
-              <div style={{ fontSize: 10.5, color: 'var(--muted)', marginBottom: 4, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                {metric === 'revenue' ? fmt(d.revenue) : d.qty.toLocaleString()}
-              </div>
-              <div title={`${d.month}: ${metric === 'revenue' ? fmt(d.revenue) : d.qty + ' units'}`} style={{
-                width: '100%', maxWidth: 46, height: h,
-                background: 'linear-gradient(180deg, var(--gold) 0%, var(--gold-mid) 100%)',
-                borderRadius: '6px 6px 0 0'
-              }} />
-              <div style={{ fontSize: 11.5, color: 'var(--brown-dark)', fontWeight: 700, marginTop: 8 }}>{d.month}</div>
-              <div style={{ fontSize: 10, color: 'var(--muted)' }}>{d.itemCount} items</div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 function ItemsTable({ items, metric, search, setSearch }) {
   const max = Math.max(...items.map(i => i[metric] || 0), 1)
   return (
@@ -1137,40 +1064,3 @@ function ItemsTable({ items, metric, search, setSearch }) {
   )
 }
 
-function RankTable({ rows, nameKey, metric, icon }) {
-  const max = Math.max(...rows.map(r => r[metric] || 0), 1)
-  const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0)
-  return (
-    <div className="card table-wrap">
-      <table className="data-table" style={{ minWidth: 600 }}>
-        <thead>
-          <tr>
-            <th>#</th><th>{nameKey === 'brand' ? 'Brand' : 'Category'}</th>
-            {nameKey === 'brand' && <th>Items</th>}
-            <th>Qty Sold</th><th>Revenue</th><th>% of Revenue</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, idx) => (
-            <tr key={r[nameKey]}>
-              <td>{idx + 1}</td>
-              <td style={{ fontWeight: 600 }}>{icon} {r[nameKey] || 'Unknown'}</td>
-              {nameKey === 'brand' && <td style={{ textAlign: 'center', color: 'var(--muted)' }}>{r.itemCount}</td>}
-              <td>
-                {metric === 'qty'
-                  ? <BarCell value={r.qty} max={max} color="var(--blue)" display={r.qty.toLocaleString()} />
-                  : r.qty.toLocaleString()}
-              </td>
-              <td style={{ fontWeight: 600, color: 'var(--green)' }}>
-                {metric === 'revenue'
-                  ? <BarCell value={r.revenue} max={max} color="var(--green)" display={fmt(r.revenue)} />
-                  : fmt(r.revenue)}
-              </td>
-              <td style={{ color: 'var(--muted)', fontSize: 12 }}>{totalRevenue ? ((r.revenue / totalRevenue) * 100).toFixed(1) : '0.0'}%</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}

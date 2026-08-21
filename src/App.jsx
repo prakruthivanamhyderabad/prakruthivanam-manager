@@ -10,6 +10,7 @@ import StockAudit from './pages/StockAudit'
 import Payments from './pages/Payments'
 import GSTFiling from './pages/GSTFiling'
 import OrderPlanning from './pages/OrderPlanning'
+import CustomerInsights from './pages/CustomerInsights'
 import Expenses from './pages/Expenses'
 import BankRecon from './pages/BankRecon'
 import ProfitLoss from './pages/ProfitLoss'
@@ -31,6 +32,7 @@ const TABS = [
   { id: 'pl', label: '📊 P&L', roles: ['manager'] },
   { id: 'gst', label: '🧾 GST Filing', roles: ['manager'] },
   { id: 'orders', label: '📦 Order Planning', roles: ['manager'] },
+  { id: 'customers', label: '👥 Customer Insights', roles: ['manager'] },
 ]
 
 export default function App({ toasts, toast }) {
@@ -147,6 +149,7 @@ export default function App({ toasts, toast }) {
         {activeTab === 'pl' && <ProfitLoss {...tabProps} />}
         {activeTab === 'gst' && <GSTFiling {...tabProps} />}
         {activeTab === 'orders' && <OrderPlanning {...tabProps} />}
+        {activeTab === 'customers' && <CustomerInsights {...tabProps} />}
       </div>
 
       {showSettings && <Settings onClose={() => setShowSettings(false)} toast={toast} />}
