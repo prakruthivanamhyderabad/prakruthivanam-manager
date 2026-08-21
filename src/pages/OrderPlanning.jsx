@@ -400,7 +400,10 @@ export default function OrderPlanning({ user, toast, setSyncStatus }) {
       const stockI = hdr.findIndex(h => h.includes('current stock'))
       const expiryI = hdr.findIndex(h => h.includes('expiry'))
 
-      let updated = 0, inserted = 0
+      const missingCols = []
+      if (catI < 0) missingCols.push('Category')
+      if (brandI < 0) missingCols.push('Brand')
+
       const existingByName = {}
       const existingByCode = {}
       products.forEach(p => {
@@ -408,12 +411,16 @@ export default function OrderPlanning({ user, toast, setSyncStatus }) {
         if (p.barcode) existingByCode[p.barcode.toLowerCase()] = p
       })
 
+      const toInsert = [], toUpdate = []
       for (let i = 1; i < data.length; i++) {
         const row = data[i]
         const name = String(row[nameI] || '').trim()
         if (!name) continue
         const code = String(row[codeI] || '').trim()
         const stock = parseFloat(String(row[stockI] || '').replace(/,/g,'')) || 0
+        const category = String(row[catI] || '').trim()
+        const brand = String(row[brandI] || '').trim()
+        const price = parseFloat(String(row[mrpI] || '').replace(/,/g,'')) || 0
         const expiry = String(row[expiryI] || '').trim()
         // Parse expiry: "6 Months" -> 6, "1 Year" -> 12
         let expiryMonths = null
@@ -421,25 +428,45 @@ export default function OrderPlanning({ user, toast, setSyncStatus }) {
         const ey = expiry.match(/(\d+)\s*year/i)
         if (em) expiryMonths = parseInt(em[1])
         else if (ey) expiryMonths = parseInt(ey[1]) * 12
-        const payload = {
-          name, barcode: code,
-          category: String(row[catI] || '').trim(),
-          brand: String(row[brandI] || '').trim(),
-          price: parseFloat(String(row[mrpI] || '').replace(/,/g,'')) || 0,
-          system_stock: stock, expiry_months: expiryMonths,
-          updated_at: new Date().toISOString()
-        }
+
         const existing = (code && existingByCode[code.toLowerCase()]) || existingByName[name.toLowerCase()]
         if (existing) {
-          await supabase.from('products').update(payload).eq('id', existing.id)
-          updated++
+          // Stock always refreshes (that's the point of this upload). Other fields
+          // only overwrite when this file actually has a value, so a leaner/partial
+          // export can't blank out brand/category/price set from an earlier upload.
+          toUpdate.push({
+            id: existing.id, name, barcode: code || existing.barcode,
+            category: category || existing.category,
+            brand: brand || existing.brand,
+            price: price || existing.price,
+            system_stock: stock,
+            expiry_months: expiryMonths != null ? expiryMonths : existing.expiry_months,
+            updated_at: new Date().toISOString()
+          })
         } else {
-          await supabase.from('products').insert(payload)
-          inserted++
+          toInsert.push({
+            name, barcode: code, category, brand, price,
+            system_stock: stock, expiry_months: expiryMonths,
+            updated_at: new Date().toISOString()
+          })
         }
       }
-      setSyncStatus({ state: 'ok', msg: `${inserted} new · ${updated} updated ✓` })
-      toast(`✓ ${inserted} new products · ${updated} updated with latest stock`, 'success')
+
+      const BATCH = 200
+      for (let i = 0; i < toInsert.length; i += BATCH) {
+        const { error } = await supabase.from('products').insert(toInsert.slice(i, i + BATCH))
+        if (error) { toast('Insert failed: ' + error.message, 'error'); setSyncStatus({ state: 'error', msg: 'Failed' }); setUploadingWhat(''); return }
+        setSyncStatus({ state: 'syncing', msg: `Saving new products... ${Math.min(i + BATCH, toInsert.length)}/${toInsert.length}` })
+      }
+      for (let i = 0; i < toUpdate.length; i += BATCH) {
+        const { error } = await supabase.from('products').upsert(toUpdate.slice(i, i + BATCH))
+        if (error) { toast('Update failed: ' + error.message, 'error'); setSyncStatus({ state: 'error', msg: 'Failed' }); setUploadingWhat(''); return }
+        setSyncStatus({ state: 'syncing', msg: `Updating stock... ${Math.min(i + BATCH, toUpdate.length)}/${toUpdate.length}` })
+      }
+
+      setSyncStatus({ state: 'ok', msg: `${toInsert.length} new · ${toUpdate.length} updated ✓` })
+      toast(`✓ ${toInsert.length} new products · ${toUpdate.length} updated with latest stock`, 'success')
+      if (missingCols.length) toast(`⚠️ ${missingCols.join(' & ')} column not found in this file — existing values kept as-is`, 'error')
       fetchAll()
     } catch (err) {
       toast('Upload failed: ' + err.message, 'error')
